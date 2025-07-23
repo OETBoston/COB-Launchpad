@@ -1,6 +1,7 @@
 import {
   SideNavigation,
   SideNavigationProps,
+  Button,
 } from "@cloudscape-design/components";
 import useOnFollow from "../common/hooks/use-on-follow";
 import { useNavigationPanelState } from "../common/hooks/use-navigation-panel-state";
@@ -12,11 +13,14 @@ import { UserRole } from "../common/types";
 import { ApiClient } from "../common/api-client/api-client";
 import { Application, Session } from "../API";
 import { Utils } from "../common/utils";
+import { v4 as uuidv4 } from "uuid";
+import { useNavigate } from "react-router-dom";
 
 export default function NavigationPanel() {
   const appContext = useContext(AppContext);
   const userContext = useContext(UserContext);
   const onFollow = useOnFollow();
+  const navigate = useNavigate();
   const [navigationPanelState, setNavigationPanelState] =
     useNavigationPanelState();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -24,6 +28,15 @@ export default function NavigationPanel() {
   const [loadingApps, setLoadingApps] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
   const initialLoadDone = useRef(false);
+
+  const handleNewSession = () => {
+    const newSessionId = uuidv4();
+    navigate(`/chatbot/playground/${newSessionId}`);
+  };
+
+  const handleHeaderClick = () => {
+    navigate("/");
+  };
 
   const truncateTitle = (title: string, maxLength: number = 30): string => {
     if (title.length <= maxLength) return title;
@@ -248,19 +261,65 @@ export default function NavigationPanel() {
   };
 
   return (
-    <SideNavigation
-      onFollow={onFollow}
-      onChange={onChange}
-      header={{ href: "/", text: CHATBOT_NAME }}
-      items={items.map((value, idx) => {
-        if (value.type === "section") {
-          const collapsed =
-            navigationPanelState.collapsedSections?.[idx] === true;
-          value.defaultExpanded = !collapsed;
-        }
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%'
+    }}>
+      {/* Sticky Header */}
+      <div style={{ 
+        padding: '1rem', 
+        borderBottom: '1px solid #e1e5e9',
+        backgroundColor: 'white',
+        flexShrink: 0,
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
+        cursor: 'pointer'
+      }}
+      onClick={handleHeaderClick}>
+        <h3 style={{
+          margin: 0,
+        }}>
+          {CHATBOT_NAME}
+        </h3>
+      </div>
+      
+      {/* Scrollable Navigation Items */}
+      <div style={{ 
+        flex: '1', 
+        overflow: 'auto',
+        minHeight: 0  // Important for flex child to be scrollable
+      }}>
+        <SideNavigation
+          onFollow={onFollow}
+          onChange={onChange}
+          items={items.map((value, idx) => {
+            if (value.type === "section") {
+              const collapsed =
+                navigationPanelState.collapsedSections?.[idx] === true;
+              value.defaultExpanded = !collapsed;
+            }
 
-        return value;
-      })}
-    />
+            return value;
+          })}
+        />
+      </div>
+      
+      {/* Sticky Footer Button */}
+      <div style={{ 
+        padding: '1rem', 
+        borderTop: '1px solid #e1e5e9',
+        backgroundColor: 'white',
+        flexShrink: 0,
+        position: 'sticky',
+        bottom: 0,
+        zIndex: 2
+      }}>
+        <Button variant="primary" iconName="add-plus" onClick={handleNewSession} fullWidth>
+          New Session
+        </Button>
+      </div>
+    </div>
   );
 }

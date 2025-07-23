@@ -323,6 +323,10 @@ class ModelAdapter:
             "usage": self.callback_handler.usage,
         }
 
+        # Always store model and workspace configuration for session restoration
+        if workspace_id:
+            metadata["workspaceId"] = workspace_id
+
         if is_admin_role(user_groups):
             self.chat_history.add_metadata(
                 {
@@ -332,6 +336,9 @@ class ModelAdapter:
                     "documents": sessions_documents + workspace_documents,
                 }
             )
+        else:
+            # Store basic configuration for non-admin users
+            self.chat_history.add_metadata(metadata)
 
         if (
             self.callback_handler.usage is not None
@@ -415,6 +422,9 @@ class ModelAdapter:
 
             if is_admin_role(user_groups) and metadata is not None:
                 self.chat_history.add_metadata(metadata)
+            else:
+                # Store basic configuration for non-admin users
+                self.chat_history.add_metadata(metadata)
 
             response = {
                 "sessionId": self.session_id,
@@ -451,6 +461,9 @@ class ModelAdapter:
         }
 
         if is_admin_role(user_groups) and metadata is not None:
+            self.chat_history.add_metadata(metadata)
+        else:
+            # Store basic configuration for non-admin users
             self.chat_history.add_metadata(metadata)
 
         response = {

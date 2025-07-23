@@ -9,6 +9,7 @@ import {
   ButtonGroup,
   ButtonGroupProps,
   FileTokenGroup,
+  Alert,
 } from "@cloudscape-design/components";
 import {
   Dispatch,
@@ -74,6 +75,12 @@ export interface ChatInputPanelProps {
   setInitErrorMessage?: (error?: string) => void;
   applicationId?: string;
   setApplication: Dispatch<React.SetStateAction<Application>>;
+  sessionConfiguration?: {
+    modelId?: string;
+    provider?: string;
+    workspaceId?: string;
+    modelKwargs?: any;
+  } | null;
 }
 
 export abstract class ChatScrollState {
@@ -125,6 +132,13 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
   const [readyState, setReadyState] = useState<ReadyState>(
     ReadyState.UNINSTANTIATED
   );
+
+  const modelMatchingCompleteRef = useRef(false);
+  const [modelMatchingComplete, setModelMatchingComplete] = useState(false);
+  const modelMatchingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [modelMatchingWarning, setModelMatchingWarning] = useState<string | undefined>(undefined);
+  const lastProcessedConfigRef = useRef<string | null>(null);
+  const sessionConfigProcessedRef = useRef<string | null>(null); // Track processed session configs
 
   const messageHistoryRef = useRef<ChatBotHistoryItem[]>([]);
   const isMediaGenerationModel = (outputModality?: ChabotOutputModality) => {
@@ -234,97 +248,319 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
 
   useEffect(() => {
     if (!appContext) return;
-    if (props.applicationId) {
-      (async () => {
-        try {
-          if (props.setInitErrorMessage) props.setInitErrorMessage(undefined);
-          const apiClient = new ApiClient(appContext);
-          const applicationResult = await apiClient.applications.getApplication(
-            props.applicationId ?? ""
-          );
-          const application = applicationResult.data?.getApplication;
-          if (application) {
-            props.setApplication(application);
-            setApplication(application);
 
-            const outputModalities = (application.outputModalities ??
-              []) as ChabotOutputModality[];
-            setOutputModality(outputModalities[0] ?? ChabotOutputModality.Text);
-          }
-        } catch (error) {
-          console.log(Utils.getErrorMessage(error));
-          if (props.setInitErrorMessage)
-            props.setInitErrorMessage(Utils.getErrorMessage(error));
-          setState((state) => ({
-            ...state,
-            applicationStatus: "error",
-          }));
-          setReadyState(ReadyState.CLOSED);
-        }
-      })();
-    } else {
-      (async () => {
-        const apiClient = new ApiClient(appContext);
+    // Only load models and workspaces once at component mount
+    const loadModelsAndWorkspaces = async () => {
+      const apiClient = new ApiClient(appContext);
+      try {
+        if (props.setInitErrorMessage) props.setInitErrorMessage(undefined);
+        
+        // Load models first
+        const modelsResult = await apiClient.models.getModels();
+        const models = modelsResult.data ? modelsResult.data.listModels : [];
+        
+        // Load workspaces if RAG is enabled
         let workspaces: Workspace[] = [];
-        let workspacesStatus: LoadingStatus = "finished";
-        /* eslint-disable-next-line  @typescript-eslint/no-explicit-any */
-        let modelsResult: GraphQLResult<any>;
-        /* eslint-disable-next-line  @typescript-eslint/no-explicit-any */
-        let workspacesResult: GraphQLResult<any>;
-        try {
-          if (props.setInitErrorMessage) props.setInitErrorMessage(undefined);
-          if (appContext?.config.rag_enabled) {
-            [modelsResult, workspacesResult] = await Promise.all([
-              apiClient.models.getModels(),
-              apiClient.workspaces.getWorkspaces(),
-            ]);
-            workspaces = workspacesResult.data?.listWorkspaces;
-            workspacesStatus =
-              workspacesResult.errors === undefined ? "finished" : "error";
-          } else {
-            modelsResult = await apiClient.models.getModels();
-          }
-
-          const models = modelsResult.data ? modelsResult.data.listModels : [];
-
-          const selectedModelOption = getSelectedModelOption(models);
-          const selectedModelMetadata = getSelectedModelMetadata(
-            models,
-            selectedModelOption
-          );
-          const selectedWorkspace = isMediaGenerationModel(
-            selectedModelMetadata?.outputModalities[0] as ChabotOutputModality
-          )
-            ? workspaceDefaultOptions[0]
-            : getSelectedWorkspaceOption(workspaces);
-
-          const selectedWorkspaceOption = appContext?.config.rag_enabled
-            ? selectedWorkspace
-            : workspaceDefaultOptions[0];
-
-          setState((state) => ({
-            ...state,
-            models,
-            workspaces,
-            selectedModel: selectedModelOption,
-            selectedModelMetadata,
-            selectedWorkspace: selectedWorkspaceOption,
-            modelsStatus: "finished",
-            workspacesStatus: workspacesStatus,
-          }));
-        } catch (error) {
-          console.log(Utils.getErrorMessage(error));
-          if (props.setInitErrorMessage)
-            props.setInitErrorMessage(Utils.getErrorMessage(error));
-          setState((state) => ({
-            ...state,
-            modelsStatus: "error",
-          }));
-          setReadyState(ReadyState.CLOSED);
+        if (appContext?.config.rag_enabled) {
+          const workspacesResult = await apiClient.workspaces.getWorkspaces();
+          workspaces = workspacesResult.data?.listWorkspaces ?? [];
         }
-      })();
+
+        setState(prevState => ({
+          ...prevState,
+          models,
+          workspaces,
+          modelsStatus: "finished",
+          workspacesStatus: "finished"
+        }));
+
+      } catch (error) {
+        console.error("Error loading models/workspaces:", error);
+        if (props.setInitErrorMessage) {
+          props.setInitErrorMessage(Utils.getErrorMessage(error));
+        }
+        setState(prevState => ({
+          ...prevState,
+          modelsStatus: "error",
+          workspacesStatus: "error"
+        }));
+        setReadyState(ReadyState.CLOSED);
+      }
+    };
+
+    loadModelsAndWorkspaces();
+  }, [appContext]); // Only run once when appContext is available
+
+  // Separate effect to handle session configuration updates
+  useEffect(() => {
+    if (!state.models || !state.workspaces) return;
+
+    // Create a unique key for this configuration to prevent duplicate processing
+    const configKey = props.sessionConfiguration ? 
+      `${props.sessionConfiguration.modelId}-${props.sessionConfiguration.provider}-${props.sessionConfiguration.workspaceId}` : 
+      'no-config';
+    
+    // Skip if we've already processed this exact configuration
+    if (sessionConfigProcessedRef.current === configKey) {
+      console.log("🔍 Skipping duplicate session config processing:", configKey);
+      return;
     }
-  }, [appContext, props.session.id, props.applicationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    sessionConfigProcessedRef.current = configKey;
+    console.log("🔍 Processing session configuration:", configKey);
+
+    let selectedModelOption = getSelectedModelOption(state.models);
+    let selectedWorkspace = workspaceDefaultOptions[0];
+    let selectedModelMetadata: Model | null = null;
+
+    // If we have session configuration, use those values
+    const sessionWorkspaceId = props.sessionConfiguration?.workspaceId;
+    if (sessionWorkspaceId && state.workspaces) {
+      const workspace = state.workspaces.find(ws => ws.id === sessionWorkspaceId);
+      if (workspace) {
+        selectedWorkspace = {
+          label: workspace.name,
+          value: workspace.id
+        };
+      }
+    }
+
+    const sessionModelId = props.sessionConfiguration?.modelId;
+    const sessionProvider = props.sessionConfiguration?.provider;
+    if (sessionModelId && sessionProvider) {
+      // Helper function to normalize model names by removing region prefix
+      const normalizeModelName = (name: string) => name.includes('.') ? 
+        name.split('.').slice(-2).join('.') : name;
+
+      const normalizedSessionModelId = normalizeModelName(sessionModelId);
+      console.log("🔍 Looking for model:", { 
+        original: sessionModelId, 
+        normalized: normalizedSessionModelId,
+        provider: sessionProvider
+      });
+
+      // Find model by comparing normalized names
+      const model = state.models.find((m: Model) => {
+        const normalizedModelName = normalizeModelName(m.name);
+        const matches = normalizedModelName === normalizedSessionModelId;
+        if (matches) {
+          console.log("🔍 Model match found:", {
+            modelName: m.name,
+            modelProvider: m.provider,
+            normalizedName: normalizedModelName
+          });
+        }
+        return matches;
+      });
+
+      if (model) {
+        selectedModelOption = {
+          label: model.name,
+          value: `${sessionProvider}::${model.name}`
+        };
+        selectedModelMetadata = model;  // Use the found model as metadata
+
+        console.log("🔍 Setting model and metadata:", {
+          option: selectedModelOption,
+          metadata: selectedModelMetadata
+        });
+      } else {
+        console.log("⚠️ Could not find matching model. Looking for:", normalizedSessionModelId);
+      }
+    }
+
+    // Mark model matching as complete after processing session config
+    if (!modelMatchingCompleteRef.current) {
+      console.log("🔍 Marking model matching complete after session config processing");
+      modelMatchingCompleteRef.current = true;
+      setModelMatchingComplete(true);
+    }
+
+    // Single state update with all changes
+    setState(prevState => {
+      const shouldUpdate = 
+        prevState.selectedModel?.value !== selectedModelOption?.value ||
+        prevState.selectedWorkspace?.value !== selectedWorkspace?.value ||
+        prevState.selectedModelMetadata?.name !== selectedModelMetadata?.name;
+
+      if (!shouldUpdate) {
+        console.log("🔍 No state update needed");
+        return prevState;
+      }
+
+      const newState = {
+        ...prevState,
+        selectedModel: selectedModelOption,
+        selectedModelMetadata: selectedModelMetadata,
+        selectedWorkspace: selectedWorkspace
+      };
+
+      console.log("🔍 Updating state with:", {
+        model: newState.selectedModel?.value,
+        metadata: newState.selectedModelMetadata?.name,
+        workspace: newState.selectedWorkspace?.value
+      });
+
+      return newState;
+    });
+
+  }, [props.sessionConfiguration, state.models, state.workspaces]);
+
+  // Add a safety timeout as backup
+  useEffect(() => {
+    if (props.sessionConfiguration && !modelMatchingCompleteRef.current) {
+      const safetyTimeout = setTimeout(() => {
+        console.log("⚠️ Safety timeout - ensuring model matching is complete");
+        if (!modelMatchingCompleteRef.current) {
+          modelMatchingCompleteRef.current = true;
+          setModelMatchingComplete(true);
+        }
+      }, 1000); // 1 second safety timeout
+
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [props.sessionConfiguration]);
+
+  // Add a debug effect to track when selectedModel changes
+  useEffect(() => {
+    console.log("🔍 selectedModel changed to:", state.selectedModel);
+  }, [state.selectedModel]);
+
+  // Debug effect to track loading overlay visibility
+  useEffect(() => {
+    const shouldShowOverlay = props.sessionConfiguration && !modelMatchingComplete;
+    console.log("🔍 Loading overlay visibility:", {
+      shouldShow: shouldShowOverlay,
+      hasSessionConfig: !!props.sessionConfiguration,
+      modelMatchingComplete,
+      sessionId: props.session.id
+    });
+  }, [props.sessionConfiguration, modelMatchingComplete, props.session.id]);
+
+  // DISABLED: This effect was overriding our session configuration handling
+  // Handle session configuration changes and trigger model matching
+  // This effect restores the model selection from session configuration when available
+  /*
+  useEffect(() => {
+    // For new sessions (no session configuration), mark model matching as complete immediately
+    if (!props.sessionConfiguration && state.models && !modelMatchingCompleteRef.current) {
+      modelMatchingCompleteRef.current = true;
+      setModelMatchingComplete(true);
+      return;
+    }
+    
+    // Only run model matching if we have session configuration, models are loaded, and matching hasn't completed
+    if (props.sessionConfiguration?.modelId && props.sessionConfiguration?.provider && state.models && !modelMatchingCompleteRef.current) {
+      // Create a unique key for this configuration
+      const configKey = `${props.sessionConfiguration.modelId}-${props.sessionConfiguration.provider}`;
+      
+      // Skip if we've already processed this exact configuration
+      if (lastProcessedConfigRef.current === configKey) {
+        return;
+      }
+      
+      lastProcessedConfigRef.current = configKey;
+      
+      const models = state.models;
+      
+      // Set up timeout for model matching (2 seconds)
+      const timeout = setTimeout(() => {
+        setModelMatchingWarning("Session model not found, using default Claude 3.5 Sonnet");
+        modelMatchingCompleteRef.current = true;
+        setModelMatchingComplete(true);
+        // Find Claude 3.5 as fallback
+        const claude35Option = models.find((model: any) => 
+          model.name === "anthropic.claude-3-5-sonnet-20240620-v1:0"
+        );
+        if (claude35Option) {
+          const selectedModelOption = {
+            label: claude35Option.name,
+            value: `${claude35Option.provider}::${claude35Option.name}`,
+          };
+          setState(prevState => ({
+            ...prevState,
+            selectedModel: selectedModelOption,
+            selectedModelMetadata: getSelectedModelMetadata(models, selectedModelOption),
+          }));
+        }
+      }, 2000);
+      modelMatchingTimeoutRef.current = timeout;
+      // Construct the model value in the correct format (provider::name) to match OptionsHelper.parseValue
+      const sessionModelValue = `${props.sessionConfiguration.provider}::${props.sessionConfiguration.modelId}`;
+      const sessionModelOption = models.find((model: any) => 
+        `${model.provider}::${model.name}` === sessionModelValue
+      );
+      // If found, clear timeout and mark matching as complete
+      if (sessionModelOption) {
+        if (modelMatchingTimeoutRef.current) {
+          clearTimeout(modelMatchingTimeoutRef.current);
+          modelMatchingTimeoutRef.current = null;
+        }
+        modelMatchingCompleteRef.current = true;
+        setModelMatchingComplete(true);
+        const selectedModelOption = {
+          label: sessionModelOption.name,
+          value: sessionModelValue,
+        };
+        setState(prevState => ({
+          ...prevState,
+          selectedModel: selectedModelOption,
+          selectedModelMetadata: getSelectedModelMetadata(models, selectedModelOption),
+        }));
+      }
+    }
+    // Add a fallback timeout for model matching if sessionConfiguration exists but modelId/provider is missing
+    if (props.sessionConfiguration && (!props.sessionConfiguration.modelId || !props.sessionConfiguration.provider) && !modelMatchingCompleteRef.current) {
+      // Set up timeout for model matching (2 seconds)
+      const timeout = setTimeout(() => {
+        setModelMatchingWarning("Session model configuration incomplete, using default Claude 3.5 Sonnet");
+        modelMatchingCompleteRef.current = true;
+        setModelMatchingComplete(true);
+        // Find Claude 3.5 as fallback
+        const models = state.models;
+        const claude35Option = models?.find((model: any) => 
+          model.name === "anthropic.claude-3-5-sonnet-20240620-v1:0"
+        );
+        if (claude35Option) {
+          const selectedModelOption = {
+            label: claude35Option.name,
+            value: `${claude35Option.provider}::${claude35Option.name}`,
+          };
+          setState(prevState => ({
+            ...prevState,
+            selectedModel: selectedModelOption,
+            selectedModelMetadata: getSelectedModelMetadata(models, selectedModelOption),
+          }));
+        }
+      }, 2000);
+      modelMatchingTimeoutRef.current = timeout;
+    }
+  }, [props.sessionConfiguration?.modelId, props.sessionConfiguration?.provider, state.models, props.sessionConfiguration]);
+  */
+
+  // Set model matching as complete for our new implementation
+  useEffect(() => {
+    if (state.models && !modelMatchingCompleteRef.current) {
+      console.log("🔍 Marking model matching as complete");
+      modelMatchingCompleteRef.current = true;
+      setModelMatchingComplete(true);
+    }
+  }, [state.models]);
+
+  // Reset model matching state when session changes to allow re-matching for new sessions
+  useEffect(() => {
+    console.log("🔍 Resetting model matching state for new session:", props.session.id);
+    modelMatchingCompleteRef.current = false;
+    setModelMatchingComplete(false);
+    setModelMatchingWarning(undefined);
+    lastProcessedConfigRef.current = null;
+    sessionConfigProcessedRef.current = null; // Reset session config processing
+    // Clear any existing timeout
+    if (modelMatchingTimeoutRef.current) {
+      clearTimeout(modelMatchingTimeoutRef.current);
+      modelMatchingTimeoutRef.current = null;
+    }
+  }, [props.session.id]);
 
   useEffect(() => {
     const onWindowScroll = () => {
@@ -421,10 +657,13 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
 
     const isMediaModel = isMediaGenerationModel(defaultOutputModality);
     if (isMediaModel) {
-      setState((prevState) => ({
-        ...prevState,
-        selectedWorkspace: workspaceDefaultOptions[0],
-      }));
+      // Only reset if not already set to the default workspace
+      if (!state.selectedWorkspace || state.selectedWorkspace.value !== workspaceDefaultOptions[0].value) {
+        setState((prevState) => ({
+          ...prevState,
+          selectedWorkspace: workspaceDefaultOptions[0],
+        }));
+      }
     }
   }, [state.selectedModelMetadata]);
 
@@ -441,9 +680,23 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
   };
 
   const handleSendMessage = async (): Promise<void> => {
+    console.log("[Send Button Clicked]", {
+      selectedModel: state.selectedModel,
+      selectedModelMetadata: state.selectedModelMetadata,
+      selectedWorkspace: state.selectedWorkspace,
+      readyState,
+      running: props.running,
+      value: state.value,
+      models: state.models,
+      applicationId: props.applicationId,
+      sessionConfiguration: props.sessionConfiguration,
+      modelMatchingComplete,
+      sessionLoading: props.session.loading
+    });
     if (!state.selectedModel && !props.applicationId) return;
     if (props.running) return;
     if (readyState !== ReadyState.OPEN) return;
+    if (!state.selectedModelMetadata && !props.applicationId) return; // Add null check for selectedModelMetadata
     ChatScrollState.userHasScrolled = false;
 
     let name, provider;
@@ -470,8 +723,7 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
         }
       : {
           action: ChatBotAction.Run,
-          modelInterface: state.selectedModelMetadata!
-            .interface as ModelInterface,
+          modelInterface: state.selectedModelMetadata?.interface as ModelInterface,
           data: {
             mode: getChatBotMode(outputModality),
             text: value,
@@ -567,8 +819,16 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
   const modelsOptions = OptionsHelper.getSelectOptionGroups(state.models ?? []);
 
   const workspaceOptions = [
-    ...workspaceDefaultOptions,
-    ...OptionsHelper.getSelectOptions(state.workspaces ?? []),
+    ...(state.workspaces ?? []).map((workspace: any) => ({
+      label: workspace.name,
+      value: workspace.id,
+    })),
+    ...(appContext?.config.rag_enabled ? [
+      {
+        label: "Create new workspace",
+        value: "__create__",
+      },
+    ] : []),
   ];
 
   const secondaryActions: ButtonGroupProps.ItemOrGroup[] = [
@@ -711,259 +971,289 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
 
   /* Update this component to support video files */
   return (
-    <SpaceBetween direction="vertical" size="l">
-      <Box>
-        <div>
-          {imageDialogVisible && (
-            <FileDialog
-              sessionId={props.session.id}
-              modality={ChabotInputModality.Image}
-              header="Add images to your message"
-              hint=".png, .jpg, .jpeg. Max 3.75MB."
-              maxSize={3.75}
-              allowedTypes={["image/png", "image/jpg", "image/jpeg"]}
-              hideDialogs={() => {
-                setImageDialogVisible(false);
-                setDocumentDialogVisible(false);
-              }}
-              cancel={() => {
-                props.setConfiguration({
-                  ...props.configuration,
-                  images: [],
-                });
-                setImages([]);
-              }}
-              configuration={props.configuration}
-              setConfiguration={props.setConfiguration}
-            />
-          )}
-          {videoDialogVisible && (
-            <FileDialog
-              sessionId={props.session.id}
-              modality={ChabotInputModality.Video}
-              header="Add videos to your message"
-              hint="video/mp4. Max 10MB."
-              maxSize={10}
-              allowedTypes={["video/mp4"]}
-              hideDialogs={() => {
-                setImageDialogVisible(false);
-                setDocumentDialogVisible(false);
-                setVideoDialogVisible(false);
-              }}
-              cancel={() => {
-                props.setConfiguration({
-                  ...props.configuration,
-                  videos: [],
-                });
-                setVideos([]);
-              }}
-              configuration={props.configuration}
-              setConfiguration={props.setConfiguration}
-            />
-          )}
-          {documentDialogVisible && (
-            <FileDialog
-              sessionId={props.session.id}
-              modality={ChabotInputModality.Document}
-              header="Add documents to your message"
-              hint=".pdf, .csv, .doc, .docx, .xls, .xlsx, .html,. txt, .md. Max 4.5MB."
-              allowedTypes={[
-                "application/pdf",
-                "text/csv",
-                "application/msword",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/vnd.ms-excel",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "text/html",
-                "text/plain",
-                "text/markdown",
-              ]}
-              maxSize={4.5}
-              hideDialogs={() => {
-                setImageDialogVisible(false);
-                setDocumentDialogVisible(false);
-              }}
-              cancel={() => {
-                props.setConfiguration({
-                  ...props.configuration,
-                  documents: [],
-                });
-                setDocuments([]);
-              }}
-              configuration={props.configuration}
-              setConfiguration={props.setConfiguration}
-            />
-          )}
-          <Box className={styles.prompt_input_wrapper}>
-            <PromptInput
-              data-locator="prompt-input"
-              value={state.value}
-              placeholder={
-                listening
-                  ? "Listening..."
-                  : props.running
-                    ? "Generating a response"
-                    : "Send a message"
-              }
-              actionButtonAriaLabel="Send"
-              maxRows={6}
-              minRows={1}
-              autoFocus={true}
-              disabled={props.running}
-              onChange={(e) =>
-                setState((state) => ({ ...state, value: e.detail.value }))
-              }
-              onAction={handleSendMessage}
-              actionButtonIconName="send"
-              disableSecondaryActionsPaddings
-              onKeyUp={(e) => {
-                if (e.detail.key === "ArrowUp") {
-                  const messages = props.messageHistory.filter(
-                    (i) => i.type === ChatBotMessageType.Human
-                  );
-                  if (state.value.length === 0 && messages.length > 0) {
-                    // Set previous message if empty and key press up
-                    setState((state) => ({
-                      ...state,
-                      value: messages[messages.length - 1].content,
-                    }));
-                  }
-                }
-              }}
-              secondaryActions={
-                <Box padding={{ left: "xxs", top: "xs" }}>
-                  <ButtonGroup
-                    ariaLabel="Chat actions"
-                    items={secondaryActions}
-                    variant="icon"
-                    onItemClick={(item) => {
-                      if (item.detail.id === "images") {
-                        setImageDialogVisible(true);
-                        setDocumentDialogVisible(false);
-                        setVideoDialogVisible(false);
-                      }
-                      if (item.detail.id === "documents") {
-                        setImageDialogVisible(false);
-                        setDocumentDialogVisible(true);
-                        setVideoDialogVisible(false);
-                      }
-                      if (item.detail.id === "videos") {
-                        setVideoDialogVisible(true);
-                        setImageDialogVisible(false);
-                        setDocumentDialogVisible(false);
-                      }
-                      if (item.detail.id === "record") {
-                        listening
-                          ? SpeechRecognition.stopListening()
-                          : SpeechRecognition.startListening();
-                      }
-                    }}
-                  />
-                </Box>
-              }
-              secondaryContent={
-                filesBlob.length > 0 && (
-                  <FileTokenGroup
-                    items={filesBlob.map((file) => ({ file }))}
-                    onDismiss={({ detail }) =>
-                      setFilesBlob((files) =>
-                        files.filter((_, index) => index !== detail.fileIndex)
-                      )
-                    }
-                    alignment="horizontal"
-                    i18nStrings={{
-                      removeFileAriaLabel: (e) => `Remove file ${e + 1}`,
-                      limitShowFewer: "Show fewer files",
-                      limitShowMore: "Show more files",
-                      errorIconAriaLabel: "Error",
-                      warningIconAriaLabel: "Warning",
-                    }}
-                    readOnly
-                    showFileSize
-                    showFileThumbnail
-                  />
-                )
-              }
-              disableActionButton={
-                readyState !== ReadyState.OPEN ||
-                (!state.models?.length && !props.applicationId) ||
-                (!state.selectedModel && !props.applicationId) ||
-                props.running ||
-                state.value.trim().length === 0 ||
-                props.session.loading
-              }
-            />
-            <span className={styles.icon}>{outputModalityIcon}</span>
-          </Box>
+    <div style={{ position: 'relative' }}>
+      <SpaceBetween direction="vertical" size="l">
+              {/* Loading overlay while model matching */}
+        {props.sessionConfiguration && !modelMatchingComplete && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          borderRadius: '8px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <StatusIndicator type="loading">Restoring session configuration...</StatusIndicator>
+            <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+              Matching model and settings...
+            </div>
+          </div>
         </div>
-      </Box>
-      {!props.applicationId && (
-        <Box>
-          <div className={styles.input_controls}>
-            <div
-              className={
-                appContext?.config.rag_enabled
-                  ? styles.input_controls_selects_2
-                  : styles.input_controls_selects_1
-              }
-            >
-              <Select
-                data-locator="select-model"
-                disabled={props.running}
-                statusType={state.modelsStatus}
-                loadingText="Loading models (might take few seconds)..."
-                placeholder="Select a model"
-                empty={
-                  <div>
-                    No models available. Please make sure you have access to
-                    Amazon Bedrock or alternatively deploy a self hosted model
-                    on SageMaker or add API_KEY to Secrets Manager
-                  </div>
-                }
-                filteringType="auto"
-                selectedOption={state.selectedModel}
-                onChange={({ detail }) => {
-                  setState((state) => ({
-                    ...state,
-                    selectedModel: detail.selectedOption,
-                    selectedModelMetadata: getSelectedModelMetadata(
-                      state.models,
-                      detail.selectedOption
-                    ),
-                  }));
+      )}
+      
+      {/* Warning message if model matching failed */}
+      {modelMatchingWarning && (
+        <Alert
+          statusIconAriaLabel="Warning"
+          type="warning"
+          header="Model Configuration"
+          dismissible
+          onDismiss={() => setModelMatchingWarning(undefined)}
+        >
+          {modelMatchingWarning}
+        </Alert>
+      )}
+      
+      <Box>
+          <div>
+            {imageDialogVisible && (
+              <FileDialog
+                sessionId={props.session.id}
+                modality={ChabotInputModality.Image}
+                header="Add images to your message"
+                hint=".png, .jpg, .jpeg. Max 3.75MB."
+                maxSize={3.75}
+                allowedTypes={["image/png", "image/jpg", "image/jpeg"]}
+                hideDialogs={() => {
+                  setImageDialogVisible(false);
+                  setDocumentDialogVisible(false);
+                }}
+                cancel={() => {
                   props.setConfiguration({
                     ...props.configuration,
-                    filesBlob: {
+                    images: [],
+                  });
+                  setImages([]);
+                }}
+                configuration={props.configuration}
+                setConfiguration={props.setConfiguration}
+              />
+            )}
+            {videoDialogVisible && (
+              <FileDialog
+                sessionId={props.session.id}
+                modality={ChabotInputModality.Video}
+                header="Add videos to your message"
+                hint="video/mp4. Max 10MB."
+                maxSize={10}
+                allowedTypes={["video/mp4"]}
+                hideDialogs={() => {
+                  setImageDialogVisible(false);
+                  setDocumentDialogVisible(false);
+                  setVideoDialogVisible(false);
+                }}
+                cancel={() => {
+                  props.setConfiguration({
+                    ...props.configuration,
+                    videos: [],
+                  });
+                  setVideos([]);
+                }}
+                configuration={props.configuration}
+                setConfiguration={props.setConfiguration}
+              />
+            )}
+            {documentDialogVisible && (
+              <FileDialog
+                sessionId={props.session.id}
+                modality={ChabotInputModality.Document}
+                header="Add documents to your message"
+                hint=".pdf, .csv, .doc, .docx, .xls, .xlsx, .html,. txt, .md. Max 4.5MB."
+                allowedTypes={[
+                  "application/pdf",
+                  "text/csv",
+                  "application/msword",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "application/vnd.ms-excel",
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  "text/html",
+                  "text/plain",
+                  "text/markdown",
+                ]}
+                maxSize={4.5}
+                hideDialogs={() => {
+                  setImageDialogVisible(false);
+                  setDocumentDialogVisible(false);
+                }}
+                cancel={() => {
+                  props.setConfiguration({
+                    ...props.configuration,
+                    documents: [],
+                  });
+                  setDocuments([]);
+                }}
+                configuration={props.configuration}
+                setConfiguration={props.setConfiguration}
+              />
+            )}
+            <Box className={styles.prompt_input_wrapper}>
+              <PromptInput
+                data-locator="prompt-input"
+                value={state.value}
+                placeholder={
+                  listening
+                    ? "Listening..."
+                    : props.running
+                      ? "Generating a response"
+                      : "Send a message"
+                }
+                actionButtonAriaLabel="Send"
+                maxRows={6}
+                minRows={1}
+                autoFocus={true}
+                disabled={props.running || (!!props.sessionConfiguration && !modelMatchingComplete)}
+                onChange={(e) =>
+                  setState((state) => ({ ...state, value: e.detail.value }))
+                }
+                onAction={handleSendMessage}
+                actionButtonIconName="send"
+                disableSecondaryActionsPaddings
+                onKeyUp={(e) => {
+                  if (e.detail.key === "ArrowUp") {
+                    const messages = props.messageHistory.filter(
+                      (i) => i.type === ChatBotMessageType.Human
+                    );
+                    if (state.value.length === 0 && messages.length > 0) {
+                      // Set previous message if empty and key press up
+                      setState((state) => ({
+                        ...state,
+                        value: messages[messages.length - 1].content,
+                      }));
+                    }
+                  }
+                }}
+                secondaryActions={
+                  <Box padding={{ left: "xxs", top: "xs" }}>
+                    <ButtonGroup
+                      ariaLabel="Chat actions"
+                      items={secondaryActions}
+                      variant="icon"
+                      onItemClick={(item) => {
+                        if (item.detail.id === "images") {
+                          setImageDialogVisible(true);
+                          setDocumentDialogVisible(false);
+                          setVideoDialogVisible(false);
+                        }
+                        if (item.detail.id === "documents") {
+                          setImageDialogVisible(false);
+                          setDocumentDialogVisible(true);
+                          setVideoDialogVisible(false);
+                        }
+                        if (item.detail.id === "videos") {
+                          setVideoDialogVisible(true);
+                          setImageDialogVisible(false);
+                          setDocumentDialogVisible(false);
+                        }
+                        if (item.detail.id === "record") {
+                          listening
+                            ? SpeechRecognition.stopListening()
+                            : SpeechRecognition.startListening();
+                        }
+                      }}
+                    />
+                  </Box>
+                }
+                secondaryContent={
+                  filesBlob.length > 0 && (
+                    <FileTokenGroup
+                      items={filesBlob.map((file) => ({ file }))}
+                      onDismiss={({ detail }) =>
+                        setFilesBlob((files) =>
+                          files.filter((_, index) => index !== detail.fileIndex)
+                        )
+                      }
+                      alignment="horizontal"
+                      i18nStrings={{
+                        removeFileAriaLabel: (e) => `Remove file ${e + 1}`,
+                        limitShowFewer: "Show fewer files",
+                        limitShowMore: "Show more files",
+                        errorIconAriaLabel: "Error",
+                        warningIconAriaLabel: "Warning",
+                      }}
+                      readOnly
+                      showFileSize
+                      showFileThumbnail
+                    />
+                  )
+                }
+                disableActionButton={
+                  readyState !== ReadyState.OPEN ||
+                  (!state.models?.length && !props.applicationId) ||
+                  (!state.selectedModel && !props.applicationId) ||
+                  props.running ||
+                  state.value.trim().length === 0 ||
+                                      props.session.loading ||
+                    (!!props.sessionConfiguration && !modelMatchingComplete)
+                }
+              />
+              <span className={styles.icon}>{outputModalityIcon}</span>
+            </Box>
+          </div>
+        </Box>
+        {!props.applicationId && (
+          <Box>
+            <div className={styles.input_controls}>
+              <div className={styles.input_controls_selects_2}>
+                                  <Select
+                    data-locator="select-model"
+                    disabled={props.running || (!!props.sessionConfiguration && !modelMatchingComplete)}
+                  statusType={state.modelsStatus}
+                  loadingText="Loading models (might take few seconds)..."
+                  placeholder="Select a model"
+                  empty={
+                    <div>
+                      No models available. Please make sure you have access to
+                      Amazon Bedrock or alternatively deploy a self hosted model
+                      on SageMaker or add API_KEY to Secrets Manager
+                    </div>
+                  }
+                  filteringType="auto"
+                  selectedOption={state.selectedModel}
+                  onChange={({ detail }) => {
+                    setState((state) => ({
+                      ...state,
+                      selectedModel: detail.selectedOption,
+                      selectedModelMetadata: getSelectedModelMetadata(
+                        state.models,
+                        detail.selectedOption
+                      ),
+                    }));
+                    props.setConfiguration({
+                      ...props.configuration,
+                      filesBlob: {
+                        images: [],
+                        documents: [],
+                        videos: [],
+                      },
                       images: [],
                       documents: [],
                       videos: [],
-                    },
-                    images: [],
-                    documents: [],
-                    videos: [],
-                  });
-                  setImages([]);
-                  setDocuments([]);
-                  setVideos([]);
-                  setFilesBlob([]);
-                  if (detail.selectedOption?.value) {
-                    StorageHelper.setSelectedLLM(detail.selectedOption.value);
-                  }
-                }}
-                options={modelsOptions}
-              />
-              {appContext?.config.rag_enabled && (
+                    });
+                    setImages([]);
+                    setDocuments([]);
+                    setVideos([]);
+                    setFilesBlob([]);
+                    if (detail.selectedOption?.value) {
+                      StorageHelper.setSelectedLLM(detail.selectedOption.value);
+                    }
+                  }}
+                  options={modelsOptions}
+                />
                 <Select
-                  disabled={
-                    props.running ||
-                    !state.selectedModelMetadata?.ragSupported ||
-                    isMediaGenerationModel(outputModality)
-                  }
+                  disabled={props.running || !appContext?.config.rag_enabled}
                   loadingText="Loading workspaces (might take few seconds)..."
                   statusType={state.workspacesStatus}
-                  placeholder="Select a workspace (RAG data source)"
+                  placeholder={appContext?.config.rag_enabled 
+                    ? "Select a workspace (RAG data source)" 
+                    : "RAG is not enabled"}
                   filteringType="auto"
-                  selectedOption={state.selectedWorkspace}
+                  selectedOption={state.selectedWorkspace || workspaceDefaultOptions[0]}
                   options={workspaceOptions}
                   onChange={({ detail }) => {
                     if (detail.selectedOption?.value === "__create__") {
@@ -973,158 +1263,81 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
                         ...state,
                         selectedWorkspace: detail.selectedOption,
                       }));
-
-                      StorageHelper.setSelectedWorkspaceId(
-                        detail.selectedOption?.value ?? ""
-                      );
                     }
                   }}
-                  empty={"No Workspaces available"}
+                  empty={appContext?.config.rag_enabled 
+                    ? "No Workspaces available" 
+                    : "RAG is not enabled"}
                 />
-              )}
-            </div>
-            <div className={styles.input_controls_right}>
-              <SpaceBetween
-                direction="horizontal"
-                size="xxs"
-                alignItems="center"
-              >
-                <div style={{ paddingTop: "1px" }}>
-                  <ConfigDialog
-                    sessionId={props.session.id}
-                    visible={configDialogVisible}
-                    setVisible={setConfigDialogVisible}
-                    configuration={props.configuration}
-                    setConfiguration={props.setConfiguration}
-                    outputModality={outputModality}
-                  />
-                  <Button
-                    iconName="settings"
-                    variant="icon"
-                    onClick={() => setConfigDialogVisible(true)}
-                  />
-                </div>
-                <StatusIndicator
-                  type={
-                    readyState === ReadyState.OPEN
-                      ? "success"
-                      : readyState === ReadyState.CONNECTING ||
-                          readyState === ReadyState.UNINSTANTIATED
-                        ? "in-progress"
-                        : "error"
-                  }
+              </div>
+              <div className={styles.input_controls_right}>
+                <SpaceBetween
+                  direction="horizontal"
+                  size="xxs"
+                  alignItems="center"
                 >
-                  {readyState === ReadyState.OPEN
-                    ? "Connected"
-                    : connectionStatus}
-                </StatusIndicator>
-              </SpaceBetween>
+                  <div style={{ paddingTop: "1px" }}>
+                    <ConfigDialog
+                      sessionId={props.session.id}
+                      visible={configDialogVisible}
+                      setVisible={setConfigDialogVisible}
+                      configuration={props.configuration}
+                      setConfiguration={props.setConfiguration}
+                      outputModality={outputModality}
+                    />
+                    <Button
+                      iconName="settings"
+                      variant="icon"
+                      onClick={() => setConfigDialogVisible(true)}
+                    />
+                  </div>
+                  <StatusIndicator
+                    type={
+                      readyState === ReadyState.OPEN
+                        ? "success"
+                        : readyState === ReadyState.CONNECTING ||
+                            readyState === ReadyState.UNINSTANTIATED
+                          ? "in-progress"
+                          : "error"
+                    }
+                  >
+                    {readyState === ReadyState.OPEN
+                      ? "Connected"
+                      : connectionStatus}
+                  </StatusIndicator>
+                </SpaceBetween>
+              </div>
             </div>
-          </div>
-        </Box>
-      )}
-    </SpaceBetween>
+          </Box>
+        )}
+      </SpaceBetween>
+    </div>
   );
 }
 
-function getSelectedWorkspaceOption(
-  workspaces: Workspace[]
-): SelectProps.Option | null {
-  let selectedWorkspaceOption: SelectProps.Option | null = null;
-
-  const savedWorkspaceId = StorageHelper.getSelectedWorkspaceId();
-  if (savedWorkspaceId) {
-    const targetWorkspace = workspaces.find((w) => w.id === savedWorkspaceId);
-
-    if (targetWorkspace) {
-      selectedWorkspaceOption = OptionsHelper.getSelectOptions([
-        targetWorkspace,
-      ])[0];
-    }
-  }
-
-  if (!selectedWorkspaceOption) {
-    selectedWorkspaceOption = workspaceDefaultOptions[0];
-  }
-
-  return selectedWorkspaceOption;
-}
-
 function getSelectedModelOption(
-  models: Model[],
-  selectedModel?: string
+  models: Model[]
 ): SelectProps.Option | null {
-  let selectedModelOption: SelectProps.Option | null = null;
-  const savedModel = selectedModel ?? StorageHelper.getSelectedLLM();
+  if (models.length === 0) return null;
 
-  if (savedModel) {
-    const savedModelDetails = OptionsHelper.parseValue(savedModel);
-    const targetModel = models.find(
-      (m) =>
-        m.name === savedModelDetails.name &&
-        m.provider === savedModelDetails.provider
-    );
+  // Try to find Claude 3.5 Sonnet as the default model
+  const bedrockModels = models.filter((m) => m.provider === "bedrock");
+  const defaultModel = bedrockModels.find((m) => m.name === "anthropic.claude-3-5-sonnet-20240620-v1:0") ||
+                      bedrockModels.find((m) => m.name === "anthropic.claude-3-5-sonnet") ||
+                      bedrockModels.find((m) => m.name === "anthropic.claude-v2") ||
+                      bedrockModels.find((m) => m.name === "anthropic.claude-v1") ||
+                      bedrockModels.find((m) => m.name === "amazon.titan-tg1-large") ||
+                      bedrockModels[0];
 
-    if (targetModel) {
-      const groups = OptionsHelper.getSelectOptionGroups([targetModel]).filter(
-        (i) => (i as SelectProps.OptionGroup).options
-      ) as SelectProps.OptionGroup[];
-      selectedModelOption =
-        groups.length > 0 && groups[0].options.length > 0
-          ? groups[0].options[0]
-          : null;
-    }
+  if (defaultModel) {
+    return {
+      label: defaultModel.name,
+      value: `${defaultModel.provider}::${defaultModel.name}`,
+    };
   }
 
-  let candidate: Model | undefined = undefined;
-  if (!selectedModelOption) {
-    const bedrockModels = models.filter((m) => m.provider === "bedrock");
-    const sageMakerModels = models.filter((m) => m.provider === "sagemaker");
-    const openAIModels = models.filter((m) => m.provider === "openai");
-
-    candidate = bedrockModels.find((m) => m.name === "anthropic.claude-v2");
-    if (!candidate) {
-      candidate = bedrockModels.find((m) => m.name === "anthropic.claude-v1");
-    }
-
-    if (!candidate) {
-      candidate = bedrockModels.find(
-        (m) => m.name === "amazon.titan-tg1-large"
-      );
-    }
-
-    if (!candidate) {
-      candidate = bedrockModels.find((m) => m.name.startsWith("amazon.titan-"));
-    }
-
-    if (!candidate && sageMakerModels.length > 0) {
-      candidate = sageMakerModels[0];
-    }
-
-    if (openAIModels.length > 0) {
-      if (!candidate) {
-        candidate = openAIModels.find((m) => m.name === "gpt-4");
-      }
-
-      if (!candidate) {
-        candidate = openAIModels.find((m) => m.name === "gpt-3.5-turbo-16k");
-      }
-    }
-
-    if (!candidate && bedrockModels.length > 0) {
-      candidate = bedrockModels[0];
-    }
-
-    if (candidate) {
-      const groups = OptionsHelper.getSelectOptionGroups([candidate]).filter(
-        (i) => (i as SelectProps.OptionGroup).options
-      ) as SelectProps.OptionGroup[];
-      selectedModelOption =
-        groups.length > 0 && groups[0].options.length > 0
-          ? groups[0].options[0]
-          : null;
-    }
-  }
-
-  return selectedModelOption;
+  return {
+    label: models[0].name,
+    value: `${models[0].provider}::${models[0].name}`,
+  };
 }

@@ -366,16 +366,16 @@ export default function MultiChat() {
   ) => {
     console.log("Message history: ", messageHistory);
     // metadata.prompts[0][0]
-    if (message.metadata.sessionId) {
+    if (message.metadata?.sessionId) {
       let prompt = "";
       if (
-        Array.isArray(message.metadata.prompts) &&
-        Array.isArray(message.metadata.prompts[0])
+        Array.isArray(message.metadata?.prompts) &&
+        Array.isArray(message.metadata?.prompts[0])
       ) {
-        prompt = message.metadata.prompts[0][0];
+        prompt = message.metadata?.prompts[0][0];
       }
       const completion = message.content;
-      const model = message.metadata.modelId;
+      const model = message.metadata?.modelId;
       const feedbackData: FeedbackData = {
         sessionId: message.metadata.sessionId as string,
         key: idx,

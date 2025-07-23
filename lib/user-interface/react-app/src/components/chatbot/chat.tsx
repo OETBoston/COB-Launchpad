@@ -60,9 +60,18 @@ export default function Chat(props: {
     []
   );
 
+  // Add state for session configuration
+  const [sessionConfiguration, setSessionConfiguration] = useState<{
+    modelId?: string;
+    provider?: string;
+    workspaceId?: string;
+    modelKwargs?: any;
+  } | null>(null);
+
   useEffect(() => {
     if (!appContext) return;
     setMessageHistory([]);
+    setSessionConfiguration(null);
 
     (async () => {
       if (!props.sessionId) {
@@ -74,19 +83,28 @@ export default function Chat(props: {
       const apiClient = new ApiClient(appContext);
       try {
         const result = await apiClient.sessions.getSession(props.sessionId);
+        console.log("Session API result:", result);
 
         if (result.data?.getSession?.history) {
           ChatScrollState.skipNextHistoryUpdate = true;
           ChatScrollState.skipNextScrollEvent = true;
-          setMessageHistory(
-            result
-              .data!.getSession!.history.filter((x) => x !== null)
-              .map((x) => ({
-                type: x!.type as ChatBotMessageType,
-                metadata: JSON.parse(x!.metadata!),
-                content: x!.content,
-              }))
-          );
+          
+          const history = result.data!.getSession!.history.filter((x) => x !== null);
+          
+          // Set message history first
+          const processedHistory = history.map((x) => ({
+            type: x!.type as ChatBotMessageType,
+            metadata: x!.metadata ? JSON.parse(x!.metadata) : null,
+            content: x!.content,
+          }));
+          setMessageHistory(processedHistory);
+
+          // Extract session configuration once
+          const sessionConfig = extractSessionConfiguration(history);
+          if (sessionConfig) {
+            console.log("🔍 Setting session configuration:", sessionConfig);
+            setSessionConfiguration(sessionConfig);
+          }
 
           window.scrollTo({
             top: 0,
@@ -102,18 +120,45 @@ export default function Chat(props: {
     })();
   }, [appContext, props.sessionId]);
 
+  // Helper function to extract session configuration from metadata
+  const extractSessionConfiguration = (history: any[]) => {
+    for (const item of history) {
+      if (item.metadata) {
+        try {
+          const metadata = JSON.parse(item.metadata);
+          if (metadata.modelId && metadata.modelKwargs) {
+            // Extract provider from modelId (format: provider.modelName)
+            const modelParts = metadata.modelId.split('.');
+            const provider = modelParts[0]; // First part is the provider (e.g., 'anthropic')
+            const modelId = metadata.modelId; // Keep the full modelId as is
+            
+            return {
+              modelId,
+              provider,
+              workspaceId: metadata.workspaceId,
+              modelKwargs: metadata.modelKwargs,
+            };
+          }
+        } catch (e) {
+          console.warn('Failed to parse session metadata:', e);
+        }
+      }
+    }
+    return null;
+  };
+
   const handleFeedback = (
     feedbackType: 1 | 0,
     idx: number,
     message: ChatBotHistoryItem
   ) => {
-    if (message.metadata.sessionId) {
+    if (message.metadata?.sessionId) {
       let prompt = "";
-      if (Array.isArray(message.metadata.prompts)) {
+      if (Array.isArray(message.metadata?.prompts)) {
         prompt = (message.metadata?.prompts[0] as string) || "";
       }
       const completion = message.content;
-      const model = message.metadata.modelId;
+      const model = message.metadata?.modelId;
       const feedbackData: FeedbackData = {
         sessionId: message.metadata.sessionId as string,
         key: idx,
@@ -211,6 +256,7 @@ export default function Chat(props: {
             setConfiguration={setConfiguration}
             applicationId={props.applicationId}
             setApplication={setApplication}
+            sessionConfiguration={sessionConfiguration}
           />
         )}
       </div>

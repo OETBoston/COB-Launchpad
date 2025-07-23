@@ -112,6 +112,9 @@ def handle_run(record):
     chat_history.add_metadata(user_message_metadata)
 
     # Add AI files and message to chat history
+    ai_images = ai_response.get("images", [])
+    ai_videos = ai_response.get("videos", [])
+
     ai_response_metadata = {
         "provider": provider,
         "modelId": model_id,

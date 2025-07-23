@@ -45,7 +45,7 @@ exports[`snapshot test 1`] = `
   "Resources": {
     "AuthenticationConstructAdminGroup28128A39": {
       "Properties": {
-        "Description": "Administrators group",
+        "Description": "Administrators group, full access to all features",
         "GroupName": "admin",
         "UserPoolId": {
           "Ref": "AuthenticationConstructUserPoolFE5ABE04",
@@ -53,10 +53,10 @@ exports[`snapshot test 1`] = `
       },
       "Type": "AWS::Cognito::UserPoolGroup",
     },
-    "AuthenticationConstructUserGroup5F3156CD": {
+    "AuthenticationConstructChatbotUserGroupE4268D36": {
       "Properties": {
-        "Description": "User group",
-        "GroupName": "user",
+        "Description": "Chatbot users group, basic access to playground and session history",
+        "GroupName": "chatbot_user",
         "UserPoolId": {
           "Ref": "AuthenticationConstructUserPoolFE5ABE04",
         },
@@ -203,7 +203,7 @@ exports[`snapshot test 1`] = `
     },
     "AuthenticationConstructWorkspaceManagerGroup00E7A4D7": {
       "Properties": {
-        "Description": "Workspace managers group",
+        "Description": "Workspace managers group, access to creating and managing RAG workspaces",
         "GroupName": "workspace_manager",
         "UserPoolId": {
           "Ref": "AuthenticationConstructUserPoolFE5ABE04",

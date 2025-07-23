@@ -84,10 +84,16 @@ class CreateWorkspaceBedrockKBRequest(BaseModel):
     [permissions.ADMIN_ROLE, permissions.WORKSPACES_MANAGER_ROLE, permissions.CHATBOT_USER_ROLE]
 )
 def list_workspaces():
-    workspaces = genai_core.workspaces.list_workspaces()
-    ret_value = [_convert_workspace(workspace) for workspace in workspaces]
-
-    return ret_value
+    try:
+        logger.info("Starting list_workspaces function")
+        workspaces = genai_core.workspaces.list_workspaces()
+        logger.info(f"Retrieved {len(workspaces)} workspaces from genai_core")
+        ret_value = [_convert_workspace(workspace) for workspace in workspaces]
+        logger.info(f"Converted {len(ret_value)} workspaces")
+        return ret_value
+    except Exception as e:
+        logger.error(f"Error in list_workspaces: {str(e)}", exc_info=True)
+        raise genai_core.types.CommonError(f"Failed to list workspaces: {str(e)}")
 
 
 @router.resolver(field_name="getWorkspace")

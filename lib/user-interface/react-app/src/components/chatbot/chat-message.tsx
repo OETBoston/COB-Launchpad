@@ -192,9 +192,9 @@ export default function ChatMessage(props: ChatMessageProps) {
   useEffect(() => {
     const processFiles = async () => {
       const sessionFiles: SessionFile[] = [
-        ...((message.metadata.images || []) as SessionFile[]),
-        ...((message.metadata.videos || []) as SessionFile[]),
-        ...((message.metadata.documents || []) as SessionFile[]),
+        ...((message.metadata?.images || []) as SessionFile[]),
+        ...((message.metadata?.videos || []) as SessionFile[]),
+        ...((message.metadata?.documents || []) as SessionFile[]),
       ];
 
       if (!appContext || sessionFiles.length === 0) return;
@@ -323,7 +323,7 @@ export default function ChatMessage(props: ChatMessageProps) {
                   container: "jsonContainer",
                 }}
               />
-              {props.message.metadata.documents &&
+              {props.message.metadata?.documents &&
                 (props.message.metadata.documents as RagDocument[]).length >
                   0 && (
                   <>
@@ -331,7 +331,7 @@ export default function ChatMessage(props: ChatMessageProps) {
                       <CopyWithPopoverButton
                         onCopy={() => {
                           navigator.clipboard.writeText(
-                            (props.message.metadata.documents as RagDocument[])[
+                            (props.message.metadata?.documents as RagDocument[])[
                               parseInt(documentIndex)
                             ].page_content
                           );
@@ -340,7 +340,7 @@ export default function ChatMessage(props: ChatMessageProps) {
                     </div>
                     <Tabs
                       tabs={(
-                        props.message.metadata.documents as RagDocument[]
+                        props.message.metadata?.documents as RagDocument[]
                       ).map((p: RagDocument, i) => {
                         return {
                           id: `${i}`,
@@ -364,7 +364,7 @@ export default function ChatMessage(props: ChatMessageProps) {
                     />
                   </>
                 )}
-              {props.message.metadata.prompts &&
+              {props.message.metadata?.prompts &&
                 (props.message.metadata.prompts as string[]).length > 0 && (
                   <PromptTabs
                     prompts={props.message.metadata.prompts as string[]}

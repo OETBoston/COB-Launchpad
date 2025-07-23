@@ -111,7 +111,7 @@ export default function Welcome() {
                   name: "Email Writer",
                   img: "/images/welcome/featured-apps/email.jpg",
                   external: false,
-                  href: "/application/b04e7d90-6048-4c9a-a638-4a8034f01c08",
+                  href: "/application/3c5c9f22-73e0-4e1b-9f4b-f7b5e53ea117",
                   description:
                     "Refine your emails to be clearer and more professional",
                 },
@@ -119,7 +119,7 @@ export default function Welcome() {
                   name: "Language Translator",
                   external: false,
                   img: "/images/welcome/featured-apps/chat.jpg",
-                  href: "/application/b4d8c7b5-32ab-4241-aa8a-4495f8c842b6",
+                  href: "/application/31cbaafa-8cbe-439a-8843-65c7933d042c",
                   description:
                     "Expertly translate and understand other languages",
                 },
@@ -127,7 +127,7 @@ export default function Welcome() {
                   name: "Agenda Planner",
                   external: false,
                   img: "/images/welcome/featured-apps/agenda.jpg",
-                  href: "/application/dc1b1f68-60f4-43a1-b4be-b6f856f1b885",
+                  href: "/application/fb61c2d9-a438-433a-a1a0-bc82e50e299e",
                   description:
                     "Create clear meeting agendas for your team",
                 },
@@ -135,7 +135,7 @@ export default function Welcome() {
                   name: "Policy Consultant",
                   img: "/images/welcome/featured-apps/doc.jpg",
                   external: false,
-                  href: "/application/c232e6d5-0bef-4d55-9d89-098dad164bcf",
+                  href: "/application/f6e36ebb-fe10-4d04-948e-e7df09887405",
                   description:
                     "Explore, interpret, and summarize Massachusetts government policies",
                 },
@@ -143,7 +143,7 @@ export default function Welcome() {
                   name: "Summary Writer",
                   external: false,
                   img: "/images/welcome/featured-apps/doc.jpg",
-                  href: "/application/ad7c1e96-1ce6-4db7-8b31-9d0b1acec08f",
+                  href: "/application/0ee1b0ef-9e09-4415-b8e8-75cff943ff1b",
                   description:
                     "Create concise summaries",
                 },
@@ -151,7 +151,7 @@ export default function Welcome() {
                   name: "Document Summarizer",
                   external: false,
                   img: "/images/welcome/featured-apps/doc.jpg",
-                  href: "/application/43deef76-95db-450d-93e5-38215d2af33a",
+                  href: "/application/4495c0e7-cd1b-491d-8faa-04742f42e1f7",
                   description:
                     "Align content to your style brand",
                 },
@@ -159,7 +159,7 @@ export default function Welcome() {
                   name: "Daily Planner",
                   external: false,
                   img: "/images/welcome/featured-apps/agenda.jpg",
-                  href: "/application/a44d2248-8b62-4ad4-9e89-d970b9add549",
+                  href: "/application/6a1f7da3-7801-4171-9687-82b13368d189",
                   description:
                     "Organize your day around your goals",
                 },
@@ -167,7 +167,7 @@ export default function Welcome() {
                   name: "Memo Writer",
                   img: "/images/welcome/featured-apps/agenda.jpg",
                   external: false,
-                  href: "/application/3a1fc0f5-b9ac-45ca-a973-e28a14fce58b",
+                  href: "/application/896639ea-9968-412f-ab33-d83e20319513",
                   description:
                     "Write clear, concise, and professional memos",
                 },
@@ -175,7 +175,7 @@ export default function Welcome() {
                   name: "Tone Tuner",
                   external: false,
                   img: "/images/welcome/featured-apps/group.jpg",
-                  href: "/application/11b9ce0f-6b9f-4928-b630-6a3fb0637ed4",
+                  href: "/application/b870afe6-d51f-4693-b3ac-2502b21b5dcc",
                   description:
                     "Adjust your message to your desired tone",
                 }

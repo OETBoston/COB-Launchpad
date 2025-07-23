@@ -31,9 +31,15 @@ WORKSPACE_OBJECT_TYPE = "workspace"
 
 if WORKSPACES_TABLE_NAME:
     table = dynamodb.Table(WORKSPACES_TABLE_NAME)
+else:
+    logger.error("WORKSPACES_TABLE_NAME environment variable is not set")
+    table = None
 
 
 def list_workspaces():
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     all_items = []
     last_evaluated_key = None
 
@@ -66,6 +72,9 @@ def list_workspaces():
 
 
 def get_workspace(workspace_id: str):
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     response = table.get_item(
         Key={"workspace_id": workspace_id, "object_type": WORKSPACE_OBJECT_TYPE}
     )
@@ -75,6 +84,9 @@ def get_workspace(workspace_id: str):
 
 
 def set_status(workspace_id: str, status: str):
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     response = table.update_item(
@@ -144,6 +156,9 @@ def create_workspace_aurora(
         "updated_at": timestamp,
     }
 
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     ddb_response = table.put_item(Item=item)
 
     response = sfn_client.start_execution(
@@ -214,6 +229,9 @@ def create_workspace_open_search(
         "updated_at": timestamp,
     }
 
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     ddb_response = table.put_item(Item=item)
 
     response = sfn_client.start_execution(
@@ -260,6 +278,9 @@ def create_workspace_kendra(
         "updated_at": timestamp,
     }
 
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     ddb_response = table.put_item(Item=item)
 
     response = sfn_client.start_execution(
@@ -305,6 +326,9 @@ def create_workspace_bedrock_kb(
         "updated_at": timestamp,
     }
 
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     response = table.put_item(Item=item)
     logger.info("Response for create_workspace_bedrock_kb", response=response)
 
@@ -312,6 +336,9 @@ def create_workspace_bedrock_kb(
 
 
 def delete_workspace(workspace_id: str):
+    if not table:
+        raise genai_core.types.CommonError("Workspaces table is not configured")
+    
     response = table.get_item(
         Key={"workspace_id": workspace_id, "object_type": WORKSPACE_OBJECT_TYPE}
     )

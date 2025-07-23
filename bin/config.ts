@@ -9,7 +9,7 @@ export function getConfig(): SystemConfig {
   }
   // Default config
   return {
-    prefix: "",
+    prefix: "Feb2025",
     /* vpc: {
        vpcId: "vpc-00000000000000000",
        createVpcEndpoints: true,

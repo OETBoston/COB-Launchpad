@@ -85,12 +85,30 @@ def get_session(id: str):
         for item in session.get("History")
     ]
 
-    if showMetadata:
-        for item, original_item in zip(history, session.get("History")):
-            item["metadata"] = json.dumps(
-                original_item.get("data", {}).get("additional_kwargs"),
-                cls=genai_core.utils.json.CustomEncoder,
-            )
+    # Always include metadata for model and workspace configuration
+    for item, original_item in zip(history, session.get("History")):
+        metadata = original_item.get("data", {}).get("additional_kwargs", {})
+        if metadata:
+            # For non-admin users, only include essential configuration metadata
+            if not showMetadata:
+                essential_metadata = {
+                    "modelId": metadata.get("modelId"),
+                    "workspaceId": metadata.get("workspaceId"),
+                    "modelKwargs": metadata.get("modelKwargs"),
+                    "sessionId": metadata.get("sessionId"),
+                }
+                # Remove None values
+                essential_metadata = {k: v for k, v in essential_metadata.items() if v is not None}
+                item["metadata"] = json.dumps(
+                    essential_metadata,
+                    cls=genai_core.utils.json.CustomEncoder,
+                )
+            else:
+                # For admin users, include full metadata
+                item["metadata"] = json.dumps(
+                    metadata,
+                    cls=genai_core.utils.json.CustomEncoder,
+                )
 
     return {
         "id": session.get("SessionId"),

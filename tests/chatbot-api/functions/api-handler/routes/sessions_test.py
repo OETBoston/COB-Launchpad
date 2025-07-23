@@ -69,8 +69,64 @@ def test_get_session_user(mocker):
         "startTime": session.get("StartTime") + "Z",
         "history": [{"type": "type", "content": "content"}],
     }
-    # no metadata in response
-    assert get_session("id") == expected
+    # Regular users now get essential configuration metadata
+    result = get_session("id")
+    assert result["id"] == expected["id"]
+    assert result["title"] == expected["title"]
+    assert result["startTime"] == expected["startTime"]
+    # Check that metadata is included for configuration restoration
+    assert "metadata" in result["history"][0]
+
+
+def test_get_session_with_configuration_metadata(mocker):
+    # Test session with model and workspace configuration
+    session_with_config = {
+        "SessionId": "SessionId",
+        "StartTime": "123",
+        "History": [
+            {
+                "type": "ai",
+                "data": {
+                    "content": "AI response",
+                    "additional_kwargs": {
+                        "modelId": "bedrock.claude-3-sonnet",
+                        "workspaceId": "workspace-123",
+                        "modelKwargs": {"temperature": 0.7, "maxTokens": 1000},
+                        "sessionId": "session-123",
+                        "userId": "user-123",
+                        "documents": [],
+                        "prompts": ["test prompt"],
+                        "usage": {"total_tokens": 150}
+                    },
+                },
+            }
+        ],
+    }
+    
+    mocker.patch("genai_core.auth.get_user_id", return_value="userId")
+    mocker.patch("genai_core.sessions.get_session", return_value=session_with_config)
+    mocker.patch("genai_core.auth.get_user_roles", return_value=["user"])
+    
+    result = get_session("id")
+    
+    # Verify that essential configuration metadata is included for regular users
+    assert "metadata" in result["history"][0]
+    metadata = result["history"][0]["metadata"]
+    
+    # Parse the metadata to verify it contains configuration
+    import json
+    parsed_metadata = json.loads(metadata)
+    
+    # Check that essential configuration is included
+    assert "modelId" in parsed_metadata
+    assert "workspaceId" in parsed_metadata
+    assert "modelKwargs" in parsed_metadata
+    assert "sessionId" in parsed_metadata
+    
+    # Check that sensitive information is not included for regular users
+    assert "documents" not in parsed_metadata
+    assert "prompts" not in parsed_metadata
+    assert "usage" not in parsed_metadata
 
 
 def test_get_session_invalid_input():
