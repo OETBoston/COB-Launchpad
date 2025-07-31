@@ -31,7 +31,7 @@ import { AppContext } from "../../common/app-context";
 import { OptionsHelper } from "../../common/helpers/options-helper";
 import { StorageHelper } from "../../common/helpers/storage-helper";
 import { API } from "aws-amplify";
-import { GraphQLSubscription, GraphQLResult } from "@aws-amplify/api";
+import { GraphQLSubscription } from "@aws-amplify/api";
 import {
   Application,
   GetApplicationQuery,
@@ -39,7 +39,7 @@ import {
   ReceiveMessagesSubscription,
   Workspace,
 } from "../../API";
-import { LoadingStatus, ModelInterface } from "../../common/types";
+import { ModelInterface } from "../../common/types";
 import styles from "../../styles/chat.module.scss";
 import ConfigDialog from "./config-dialog";
 import {
@@ -127,7 +127,7 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
   const [outputModality, setOutputModality] = useState<ChabotOutputModality>(
     ChabotOutputModality.Text
   );
-  const [application, setApplication] =
+  const [application] =
     useState<GetApplicationQuery["getApplication"]>(null);
   const [readyState, setReadyState] = useState<ReadyState>(
     ReadyState.UNINSTANTIATED
@@ -294,6 +294,14 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
   // Separate effect to handle session configuration updates
   useEffect(() => {
     if (!state.models || !state.workspaces) return;
+
+    // Skip model matching for applications - they have pre-configured models
+    if (props.applicationId) {
+      console.log("🔍 Skipping model matching for application mode");
+      setModelMatchingComplete(true);
+      modelMatchingCompleteRef.current = true;
+      return;
+    }
 
     // Create a unique key for this configuration to prevent duplicate processing
     const configKey = props.sessionConfiguration ? 

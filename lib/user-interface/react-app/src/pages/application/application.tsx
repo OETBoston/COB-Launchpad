@@ -37,6 +37,12 @@ export default function ApplicationChat() {
     fetchApplication();
   }, [appContext, applicationId]);
 
+  const handleMessageSent = async () => {
+    // Trigger a custom event that NavigationPanel can listen to
+    const event = new CustomEvent('chatMessageSent');
+    window.dispatchEvent(event);
+  };
+
   return (
     <BaseAppLayout
       content={
@@ -46,6 +52,7 @@ export default function ApplicationChat() {
             applicationId={applicationId} 
             description={description}
             name={name}
+            onMessageSent={handleMessageSent}
           />
         </Container>
       }

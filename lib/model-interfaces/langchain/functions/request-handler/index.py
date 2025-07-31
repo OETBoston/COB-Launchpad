@@ -94,6 +94,13 @@ def handle_run(record):
     documents = data.get("documents", [])
     videos = data.get("videos", [])
     system_prompts = record.get("systemPrompts", {})
+    application_id = data.get("applicationId")  # Extract applicationId for session metadata
+    
+    logger.info(f"Langchain handler processing request:")
+    logger.info(f"- Session ID: {session_id}")
+    logger.info(f"- Application ID: {application_id}")
+    logger.info(f"- Data keys: {list(data.keys())}")
+    
     if not session_id:
         session_id = str(uuid.uuid4())
 
@@ -119,6 +126,7 @@ def handle_run(record):
         documents=documents,
         videos=videos,
         system_prompts=system_prompts,
+        application_id=application_id,  # Pass applicationId to the model adapter
     )
 
     logger.debug(response)

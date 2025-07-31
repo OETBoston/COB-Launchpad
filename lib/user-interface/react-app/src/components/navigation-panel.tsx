@@ -128,11 +128,29 @@ export default function NavigationPanel() {
       const recentSessionItems = loadingSessions
         ? [{ type: "link" as const, text: "Loading sessions...", href: "#" }]
         : recentSessions.length > 0
-          ? recentSessions.map(session => ({
-              type: "link" as const,
-              text: session.title ? truncateTitle(session.title) : `Session ${session.id.substring(0, 8)}...`,
-              href: `/chatbot/playground/${session.id}`
-            }))
+          ? recentSessions.map(session => {
+              // Check if this session has applicationId to use the direct application route
+              const sessionData = session as (typeof session & {
+                applicationId?: string;
+                applicationConfig?: any; // Use any to handle type flexibility
+              });
+              
+              const isApplicationSession = !!sessionData.applicationId;
+              const href = isApplicationSession 
+                ? `/application/${sessionData.applicationId}/${session.id}`
+                : `/chatbot/playground/${session.id}`;
+              
+              // Use application name if available for application sessions
+              const displayName = isApplicationSession && sessionData.applicationConfig?.name
+                ? `${sessionData.applicationConfig.name} - ${session.title ? truncateTitle(session.title, 20) : 'Session'}`
+                : (session.title ? truncateTitle(session.title) : `Session ${session.id.substring(0, 8)}...`);
+              
+              return {
+                type: "link" as const,
+                text: displayName,
+                href: href
+              };
+            })
           : [{ type: "link" as const, text: "No recent sessions", href: "#" }];
           
       const adminAndWorkspaceManagerItems: SideNavigationProps.Item[] = [

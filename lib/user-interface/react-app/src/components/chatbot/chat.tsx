@@ -19,7 +19,7 @@ import ChatMessage from "./chat-message";
 import ChatInputPanel, { ChatScrollState } from "./chat-input-panel";
 import styles from "../../styles/chat.module.scss";
 import { CHATBOT_NAME } from "../../common/constants";
-import { Application } from "../../API";
+import { Application, RestoredApplicationConfig } from "../../API";
 
 export default function Chat(props: {
   sessionId?: string;
@@ -68,10 +68,34 @@ export default function Chat(props: {
     modelKwargs?: any;
   } | null>(null);
 
+  // Add state for restored application data
+  const [restoredApplicationId, setRestoredApplicationId] = useState<string | undefined>(undefined);
+  const [restoredApplicationConfig, setRestoredApplicationConfig] = useState<RestoredApplicationConfig | undefined>(undefined);
+  
+  // Computed property to determine effective applicationId (from props or restored from session)
+  const effectiveApplicationId = props.applicationId || restoredApplicationId;
+  const effectiveDescription = props.description || restoredApplicationConfig?.description || 
+    (restoredApplicationId ? "Application session (original application no longer available)" : undefined);
+  const effectiveName = props.name || restoredApplicationConfig?.name || 
+    (restoredApplicationId ? "Application Chat" : undefined);
+  
+  // Add logging for effective values
+  useEffect(() => {
+    console.log("🔍 Chat: Effective values updated:");
+    console.log("🔍 Chat: - effectiveApplicationId:", effectiveApplicationId);
+    console.log("🔍 Chat: - effectiveDescription:", effectiveDescription);
+    console.log("🔍 Chat: - effectiveName:", effectiveName);
+    console.log("🔍 Chat: - props.applicationId:", props.applicationId);
+    console.log("🔍 Chat: - restoredApplicationId:", restoredApplicationId);
+    console.log("🔍 Chat: - restoredApplicationConfig:", restoredApplicationConfig);
+  }, [effectiveApplicationId, effectiveDescription, effectiveName, props.applicationId, restoredApplicationId, restoredApplicationConfig]);
+
   useEffect(() => {
     if (!appContext) return;
     setMessageHistory([]);
     setSessionConfiguration(null);
+    setRestoredApplicationId(undefined);
+    setRestoredApplicationConfig(undefined);
 
     (async () => {
       if (!props.sessionId) {
@@ -89,6 +113,19 @@ export default function Chat(props: {
           ChatScrollState.skipNextHistoryUpdate = true;
           ChatScrollState.skipNextScrollEvent = true;
           
+          console.log("🔍 Chat: Raw session result:", result.data.getSession);
+          
+          // Handle GraphQL errors gracefully
+          if (result.errors && result.errors.length > 0) {
+            console.log("🔍 Chat: GraphQL errors detected:", result.errors);
+            const appConfigErrors = result.errors.filter(error => 
+              error.path && error.path.includes('applicationConfig')
+            );
+            if (appConfigErrors.length > 0) {
+              console.log("🔍 Chat: Application config errors detected, will restore with applicationId only");
+            }
+          }
+          
           const history = result.data!.getSession!.history.filter((x) => x !== null);
           
           // Set message history first
@@ -99,10 +136,40 @@ export default function Chat(props: {
           }));
           setMessageHistory(processedHistory);
 
+          // Check if this session has application data
+          const sessionData = result.data.getSession as (typeof result.data.getSession & {
+            applicationId?: string;
+            applicationConfig?: any; // Use any to avoid __typename conflicts
+          });
+          
+          console.log("🔍 Chat: Session data keys:", Object.keys(sessionData));
+          console.log("🔍 Chat: ApplicationId:", sessionData.applicationId);
+          console.log("🔍 Chat: ApplicationConfig:", sessionData.applicationConfig);
+          
+          if (sessionData.applicationId) {
+            console.log("🔍 Chat: ✅ Restoring application session:", sessionData.applicationId);
+            setRestoredApplicationId(sessionData.applicationId);
+            
+            // If we have current application config, use it
+            if (sessionData.applicationConfig && sessionData.applicationConfig !== null) {
+              console.log("🔍 Chat: ✅ Applying restored application config:", sessionData.applicationConfig);
+              console.log("🔍 Chat: App name:", sessionData.applicationConfig.name);
+              console.log("🔍 Chat: App description:", sessionData.applicationConfig.description);
+              // Cast to RestoredApplicationConfig to fix type mismatch
+              setRestoredApplicationConfig(sessionData.applicationConfig as RestoredApplicationConfig);
+            } else {
+              console.log("🔍 Chat: ⚠️ ApplicationId found but no config available - original application may have been deleted");
+              // Still restore as application session, but with no specific config
+              setRestoredApplicationConfig(undefined);
+            }
+          } else {
+            console.log("🔍 Chat: ❌ No applicationId found in session");
+          }
+
           // Extract session configuration once
           const sessionConfig = extractSessionConfiguration(history);
           if (sessionConfig) {
-            console.log("🔍 Setting session configuration:", sessionConfig);
+            console.log("🔍 Chat: Setting session configuration:", sessionConfig);
             setSessionConfiguration(sessionConfig);
           }
 
@@ -166,7 +233,7 @@ export default function Chat(props: {
         prompt: prompt,
         completion: completion,
         model: model as string,
-        applicationId: props.applicationId,
+        applicationId: effectiveApplicationId,  // Use effective applicationId (props or restored)
       };
       addUserFeedback(feedbackData);
     }
@@ -182,7 +249,7 @@ export default function Chat(props: {
   return (
     <div
       className={
-        props.applicationId ? styles.chat_app_container : styles.chat_container
+        effectiveApplicationId ? styles.chat_app_container : styles.chat_container
       }
     >
       {initError && (
@@ -194,11 +261,11 @@ export default function Chat(props: {
           {initError}
         </Alert>
       )}
-      {props.description && (
+      {effectiveDescription && (
         <Container>
           <SpaceBetween direction="vertical" size="xxs">
-            <Header variant="h3">{props.name}</Header>
-            <p>{props.description}</p>
+            <Header variant="h3">{effectiveName}</Header>
+            <p>{effectiveDescription}</p>
           </SpaceBetween>
         </Container>
       )}
@@ -225,11 +292,11 @@ export default function Chat(props: {
         }}>
           {messageHistory.length == 0 &&
             !session?.loading &&
-            !props.applicationId && <center>{CHATBOT_NAME}</center>}
+            !effectiveApplicationId && <center>{CHATBOT_NAME}</center>}
           {messageHistory.length == 0 &&
             !session?.loading &&
-            props.applicationId && (
-              <center>{props.name ?? CHATBOT_NAME}</center>
+            effectiveApplicationId && (
+              <center>{effectiveName ?? CHATBOT_NAME}</center>
             )}
           {session?.loading && (
             <center>
@@ -254,7 +321,7 @@ export default function Chat(props: {
             setInitErrorMessage={(error) => setInitError(error)}
             configuration={configuration}
             setConfiguration={setConfiguration}
-            applicationId={props.applicationId}
+            applicationId={effectiveApplicationId}  // Use effective applicationId (props or restored)
             setApplication={setApplication}
             sessionConfiguration={sessionConfiguration}
           />

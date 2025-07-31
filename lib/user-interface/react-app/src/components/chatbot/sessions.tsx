@@ -64,7 +64,8 @@ export default function Sessions(props: SessionsProps) {
     try {
       setGlobalError(undefined);
       const result = await apiClient.sessions.getSessions();
-      setSessions(result.data!.listSessions);
+      // Cast to handle type mismatch between Application and RestoredApplicationConfig
+      setSessions(result.data!.listSessions as Session[]);
     } catch (error) {
       console.log(Utils.getErrorMessage(error));
       setGlobalError(Utils.getErrorMessage(error));
@@ -273,9 +274,25 @@ export default function Sessions(props: SessionsProps) {
               sortingField: "title",
               width: 800,
               minWidth: 200,
-              cell: (e) => (
-                <Link to={`/chatbot/playground/${e.id}`}>{e.title}</Link>
-              ),
+              cell: (e) => {
+                // Check if this session has applicationId to use the direct application route
+                const sessionData = e as (typeof e & {
+                  applicationId?: string;
+                  applicationConfig?: any; // Use any to handle type flexibility
+                });
+                
+                const isApplicationSession = !!sessionData.applicationId;
+                const href = isApplicationSession 
+                  ? `/application/${sessionData.applicationId}/${e.id}`
+                  : `/chatbot/playground/${e.id}`;
+                
+                // Show application indicator and name for application sessions
+                const displayTitle = isApplicationSession && sessionData.applicationConfig?.name
+                  ? `🔧 ${sessionData.applicationConfig.name} - ${e.title || 'Session'}`
+                  : e.title;
+                
+                return <Link to={href}>{displayTitle}</Link>;
+              },
               isRowHeader: true,
             },
             {

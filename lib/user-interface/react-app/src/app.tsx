@@ -50,6 +50,14 @@ function App() {
                 </Layout>
               }
             />
+            <Route
+              path="/application/:applicationId/:sessionId"
+              element={
+                <Layout showHeader={true}>
+                  <ApplicationChat />
+                </Layout>
+              }
+            />
             {userContext?.userRoles !== undefined &&
               (userContext?.userRoles.includes(UserRole.ADMIN) ||
                 userContext?.userRoles.includes(UserRole.WORKSPACE_MANAGER) ||

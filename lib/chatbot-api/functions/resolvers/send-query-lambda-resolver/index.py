@@ -74,8 +74,11 @@ def handler(event, context: LambdaContext):
     user_roles = event.get("identity", {}).get("claims").get("cognito:groups")
 
     request = json.loads(event["arguments"]["data"])
+    logger.info(f"Send query resolver processing request with keys: {list(request.keys())}")
+    
     if request.get("applicationId"):
         application_id = request.get("applicationId")
+        logger.info(f"Processing application request for applicationId: {application_id}")
         application_item = get_application(application_id)
         logger.info("Application item 1", applicationItem=application_item)
 
@@ -126,6 +129,7 @@ def handler(event, context: LambdaContext):
                 "sessionId": request["data"]["sessionId"],
                 "workspaceId": workspaceId,
                 "modelKwargs": modelKwargs,
+                "applicationId": application_id,  # Add applicationId to preserve it in session metadata
             },
         }
     else:

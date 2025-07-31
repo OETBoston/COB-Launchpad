@@ -222,6 +222,7 @@ class ModelAdapter:
         videos=[],
         user_groups=None,
         system_prompts={},
+        application_id=None,
     ):
         if not self.llm:
             raise ValueError("llm must be set")
@@ -326,6 +327,13 @@ class ModelAdapter:
         # Always store model and workspace configuration for session restoration
         if workspace_id:
             metadata["workspaceId"] = workspace_id
+            
+        # Store applicationId for application session restoration
+        if application_id:
+            metadata["applicationId"] = application_id
+            logger.info(f"Storing applicationId in metadata: {application_id}")
+        else:
+            logger.info("No applicationId provided - regular session")
 
         if is_admin_role(user_groups):
             self.chat_history.add_metadata(
@@ -375,6 +383,7 @@ class ModelAdapter:
         workspace_id=None,
         user_groups=None,
         system_prompts={},
+        application_id=None,
     ):
         if not self.llm:
             raise ValueError("llm must be set")
@@ -419,6 +428,13 @@ class ModelAdapter:
                 "documents": documents,
                 "prompts": self.callback_handler.prompts,
             }
+            
+            # Store applicationId for application session restoration
+            if application_id:
+                metadata["applicationId"] = application_id
+                logger.info(f"Storing applicationId in run_with_chain metadata: {application_id}")
+            else:
+                logger.info("No applicationId provided in run_with_chain - regular session")
 
             if is_admin_role(user_groups) and metadata is not None:
                 self.chat_history.add_metadata(metadata)
@@ -478,7 +494,7 @@ class ModelAdapter:
         return response
 
     def run_with_media_generation_chain(
-        self, prompt, user_groups=None, images=[], documents=[], videos=[]
+        self, prompt, user_groups=None, images=[], documents=[], videos=[], application_id=None
     ):
         # Get chat history
         messages = self.chat_history.messages
@@ -511,6 +527,13 @@ class ModelAdapter:
             "documents": documents,
             "videos": videos,
         }
+        
+        # Store applicationId for application session restoration
+        if application_id:
+            user_message_metadata["applicationId"] = application_id
+            logger.info(f"Storing applicationId in media generation user metadata: {application_id}")
+        else:
+            logger.info("No applicationId provided in media generation - regular session")
         self.chat_history.add_user_message(prompt)
         self.chat_history.add_metadata(user_message_metadata)
 
@@ -527,6 +550,13 @@ class ModelAdapter:
             "images": ai_images,
             "videos": ai_videos,
         }
+        
+        # Store applicationId for application session restoration
+        if application_id:
+            ai_response_metadata["applicationId"] = application_id
+            logger.info(f"Storing applicationId in media generation AI metadata: {application_id}")
+        else:
+            logger.info("No applicationId provided in media generation AI response - regular session")
 
         ai_text_response = ai_response.get("content", "")
         self.chat_history.add_ai_message(ai_text_response)
@@ -552,15 +582,14 @@ class ModelAdapter:
         self,
         prompt,
         workspace_id=None,
+        user_groups=None,
         images=[],
         documents=[],
         videos=[],
-        user_groups=[],
         system_prompts={},
-        *args,
-        **kwargs,
+        application_id=None,  # Add application_id parameter
     ):
-        logger.debug(f"run with {kwargs}")
+        logger.debug(f"run with application_id: {application_id}")
         logger.debug(f"workspace_id {workspace_id}")
         logger.debug(f"mode: {self._mode}")
 
@@ -580,14 +609,12 @@ class ModelAdapter:
                     documents,
                     videos,
                     user_groups,
-                    system_prompts=system_prompts,
+                    system_prompts,
+                    application_id,  # Pass application_id to chain method
                 )
             else:
                 response = self.run_with_chain(
-                    prompt,
-                    workspace_id,
-                    user_groups,
-                    system_prompts=system_prompts,
+                    prompt, workspace_id, user_groups, system_prompts, application_id
                 )
             guardrail_response = self.apply_bedrock_guardrails(
                 source="OUTPUT", content=response.get("content")
@@ -613,6 +640,7 @@ class ModelAdapter:
                 images,
                 documents,
                 videos,
+                application_id,  # Pass application_id to media generation chain
             )
 
         raise ValueError(f"unknown mode {self._mode}")

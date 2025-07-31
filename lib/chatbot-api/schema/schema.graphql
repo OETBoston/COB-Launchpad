@@ -282,6 +282,8 @@ type Session @aws_cognito_user_pools {
   title: String
   startTime: AWSDateTime!
   history: [SessionHistoryItem]
+  applicationId: String
+  applicationConfig: RestoredApplicationConfig
 }
 
 type SessionHistoryItem @aws_cognito_user_pools {
@@ -366,6 +368,30 @@ type Role @aws_cognito_user_pools {
 type Application @aws_cognito_user_pools {
   id: String!
   name: String!
+  description: String
+  model: String
+  workspace: String
+  systemPrompt: String
+  systemPromptRag: String
+  condenseSystemPrompt: String
+  roles: [String]
+  allowImageInput: Boolean
+  allowDocumentInput: Boolean
+  allowVideoInput: Boolean
+  outputModalities: [String]
+  enableGuardrails: Boolean
+  streaming: Boolean
+  maxTokens: Int
+  temperature: Float
+  topP: Float
+  seed: Int
+  createTime: AWSDateTime
+  updateTime: AWSDateTime
+}
+
+type RestoredApplicationConfig @aws_cognito_user_pools {
+  id: String
+  name: String
   description: String
   model: String
   workspace: String
