@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useRef } from "react";
 import {
   ChatBotConfiguration,
   ChatBotHistoryItem,
@@ -30,6 +30,7 @@ export default function Chat(props: {
 }) {
   const appContext = useContext(AppContext);
   const [running, setRunning] = useState<boolean>(false);
+  const previousRunningRef = useRef<boolean>(false);
   const [session, setSession] = useState<
     { id: string; loading: boolean } | undefined
   >();
@@ -89,6 +90,15 @@ export default function Chat(props: {
     console.log("🔍 Chat: - restoredApplicationId:", restoredApplicationId);
     console.log("🔍 Chat: - restoredApplicationConfig:", restoredApplicationConfig);
   }, [effectiveApplicationId, effectiveDescription, effectiveName, props.applicationId, restoredApplicationId, restoredApplicationConfig]);
+
+  // Track when AI finishes responding and trigger session refresh
+  useEffect(() => {
+    if (previousRunningRef.current === true && running === false) {
+      // AI just finished responding, refresh sessions
+      props.onMessageSent?.();
+    }
+    previousRunningRef.current = running;
+  }, [running, props.onMessageSent]);
 
   useEffect(() => {
     if (!appContext) return;
@@ -185,7 +195,7 @@ export default function Chat(props: {
       setSession({ id: props.sessionId, loading: false });
       setRunning(false);
     })();
-  }, [appContext, props.sessionId]);
+  }, [appContext, props.sessionId, props.applicationId]);
 
   // Helper function to extract session configuration from metadata
   const extractSessionConfiguration = (history: any[]) => {
@@ -312,12 +322,7 @@ export default function Chat(props: {
             running={running}
             setRunning={setRunning}
             messageHistory={messageHistory}
-            setMessageHistory={(history) => {
-              setMessageHistory(history);
-              if (history.length > messageHistory.length) {
-                props.onMessageSent?.();
-              }
-            }}
+            setMessageHistory={setMessageHistory}
             setInitErrorMessage={(error) => setInitError(error)}
             configuration={configuration}
             setConfiguration={setConfiguration}

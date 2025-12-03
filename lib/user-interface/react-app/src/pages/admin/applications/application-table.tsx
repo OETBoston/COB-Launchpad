@@ -1,29 +1,21 @@
 import {
-  Alert,
   Pagination,
   PropertyFilter,
   Table,
 } from "@cloudscape-design/components";
 import { useCollection } from "@cloudscape-design/collection-hooks";
-import { useCallback, useContext, useEffect, useState } from "react";
 import { TextHelper } from "../../../common/helpers/text-helper";
 import { TableEmptyState } from "../../../components/table-empty-state";
 import { TableNoMatchState } from "../../../components/table-no-match-state";
 import { PropertyFilterI18nStrings } from "../../../common/i18n/property-filter-i18n-strings";
 
-import { AppContext } from "../../../common/app-context";
-import { ApiClient } from "../../../common/api-client/api-client";
-import { Application } from "../../../API";
-import { Utils } from "../../../common/utils";
 import { ApplicationPageHeader } from "./application-page-header";
 import { ApplicationColumnDefinitions } from "./column-definitions";
 import { ApplicationColumnFilteringProperties } from "./application-filtering-properties";
+import { useApplicationsContext } from "../../../common/applications-context";
 
 export default function ApplicationTable() {
-  const appContext = useContext(AppContext);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [globalError, setGlobalError] = useState<string | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
+  const { applications, loadingApplications, refreshApplications } = useApplicationsContext();
   const {
     items,
     actions,
@@ -58,39 +50,8 @@ export default function ApplicationTable() {
     selection: {},
   });
 
-  const getApplications = useCallback(async () => {
-    if (!appContext) return;
-
-    const apiClient = new ApiClient(appContext);
-    try {
-      setGlobalError(undefined);
-      const result = await apiClient.applications.getApplications();
-      setApplications(result.data!.listApplications);
-    } catch (error) {
-      console.error(Utils.getErrorMessage(error));
-      setGlobalError(Utils.getErrorMessage(error));
-    }
-
-    setLoading(false);
-  }, [appContext]);
-
-  useEffect(() => {
-    if (!appContext) return;
-
-    getApplications();
-  }, [appContext, getApplications]);
-
   return (
     <>
-      {globalError && (
-        <Alert
-          statusIconAriaLabel="Error"
-          type="error"
-          header="Unable to load the applications."
-        >
-          {globalError}
-        </Alert>
-      )}
       <Table
         {...collectionProps}
         items={items}
@@ -102,9 +63,9 @@ export default function ApplicationTable() {
         header={
           <ApplicationPageHeader
             selectedApplications={collectionProps.selectedItems ?? []}
-            getApplications={getApplications}
+            getApplications={refreshApplications}
             counter={
-              loading
+              loadingApplications
                 ? undefined
                 : TextHelper.getHeaderCounterText(
                     applications,
@@ -113,7 +74,7 @@ export default function ApplicationTable() {
             }
           />
         }
-        loading={loading}
+        loading={loadingApplications}
         loadingText="Loading Applications"
         filter={
           <PropertyFilter

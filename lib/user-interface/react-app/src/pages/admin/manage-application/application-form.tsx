@@ -152,7 +152,7 @@ export default function ApplicationForm(props: ApplicationFormProps) {
   }, [appContext, props.data, initialLoad]);
 
   const langchainModels = models.filter((m) => m.interface === "langchain");
-  const modelsOptions = OptionsHelper.getSelectOptionGroups(langchainModels);
+  const modelsOptions = OptionsHelper.getSelectOptionGroupsByUseCase(langchainModels);
   const workspaceOptions = [
     ...workspaceDefaultOptions,
     ...OptionsHelper.getSelectOptions(workspaces ?? []),

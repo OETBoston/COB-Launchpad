@@ -167,32 +167,37 @@ def handle_failed_records(records):
         data = detail.get("data", {})
         session_id = data.get("sessionId", "")
 
-        message = "⚠️ *Something went wrong*"
+        # Log the full error for debugging
+        logger.error(f"Request failed with error: {error}")
+        logger.error(f"Error type: {type(error)}")
+        
+        # Convert error to string for pattern matching
+        error_str = str(error)
+        
+        message = "⚠️ *This request cannot be completed at this time due to the current model's service capacity constraints. For support, please contact the administrator Michael Huang at [michael.huang@boston.gov](mailto:michael.huang@boston.gov).*"
         if (
-            "An error occurred (ValidationException)" in error
-            and "The provided image must have dimensions in set [1280x720]" in error
+            "An error occurred (ValidationException)" in error_str
+            and "The provided image must have dimensions in set [1280x720]" in error_str
         ):
             # At this time only one input size is supported by the Nova reel model.
             message = "⚠️ *The provided image must have dimensions of 1280x720.*"
         elif (
-            "An error occurred (ValidationException)" in error
+            "An error occurred (ValidationException)" in error_str
             and "The width of the provided image must be within range [320, 4096]"
-            in error
+            in error_str
         ):
             # At this time only this size is supported by the Nova canvas model.
             message = "⚠️ *The width of the provided image must be within range 320 and 4096 pixels.*"  # noqa
         elif (
-            "An error occurred (AccessDeniedException)" in error
+            "An error occurred (AccessDeniedException)" in error_str
             and "You don't have access to the model with the specified model ID"
-            in error
+            in error_str
         ):
             message = (
                 "*This model is not enabled. "
                 "Please try again later or contact "
                 "an administrator*"
             )
-        else:
-            logger.error("Unable to process request", error=error)
 
         send_to_client(
             {

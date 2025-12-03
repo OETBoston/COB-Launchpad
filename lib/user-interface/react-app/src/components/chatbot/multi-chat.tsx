@@ -487,7 +487,7 @@ export default function MultiChat() {
                         ) ?? undefined;
                       setChatSessions([...chatSessions]);
                     }}
-                    options={OptionsHelper.getSelectOptionGroups(models)}
+                    options={OptionsHelper.getSelectOptionGroupsByUseCase(models)}
                   />
                   <div style={{ display: "flex", gap: "2px" }}>
                     <Button

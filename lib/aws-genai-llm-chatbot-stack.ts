@@ -177,7 +177,9 @@ export class AwsGenAILLMChatbotStack extends cdk.Stack {
         customProviderName: props.config.cognitoFederation?.customProviderName,
         customProviderType: props.config.cognitoFederation?.customProviderType,
         callbackUrls: [`https://${userInterface.publishedDomain}`],
-        logoutUrls: [`https://${userInterface.publishedDomain}`],
+        logoutUrls: props.config.cognitoFederation?.customOIDC?.OIDCLogoutURL 
+          ? [props.config.cognitoFederation.customOIDC.OIDCLogoutURL]
+          : [`https://${userInterface.publishedDomain}`],
       };
 
       const lambdaInvokePolicyStatement = new iam.PolicyStatement({

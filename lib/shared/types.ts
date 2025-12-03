@@ -105,6 +105,7 @@ export interface SystemConfig {
       OIDCClient?: string;
       OIDCSecret?: string;
       OIDCIssuerURL?: string;
+      OIDCLogoutURL?: string;
       OIDCAuthorizationEndpoint?: string;
       OIDCJWKSURI?: string;
       OIDCTokenEndpoint?: string;

@@ -243,10 +243,33 @@ class BedrockChatAdapter(ModelAdapter):
         top_p = model_kwargs.get("topP")
         max_tokens = model_kwargs.get("maxTokens")
 
-        if temperature is not None:
-            params["temperature"] = temperature
-        if top_p:
-            params["top_p"] = top_p
+        # Claude 4.x models (Sonnet 4, Sonnet 4.5, Opus 4) don't support both temperature and top_p
+        # Use only temperature for these models
+        model_id_lower = self.model_id.lower()
+        is_claude_4 = (
+            "claude-sonnet-4" in model_id_lower or 
+            "sonnet-4-5" in model_id_lower or 
+            "sonnet-4.5" in model_id_lower or
+            "sonnet4" in model_id_lower or
+            "claude-4" in model_id_lower or
+            "claude-opus-4" in model_id_lower or
+            "opus-4" in model_id_lower or
+            "opus4" in model_id_lower
+        )
+        logger.info(f"Model check: model_id={self.model_id}, is_claude_4={is_claude_4}")
+        
+        if is_claude_4:
+            # Only use temperature for Claude 4.x models
+            if temperature is not None:
+                params["temperature"] = temperature
+            # Skip top_p for Claude 4.x
+            logger.info(f"Claude 4.x detected - using temperature only, skipping top_p")
+        else:
+            if temperature is not None:
+                params["temperature"] = temperature
+            if top_p:
+                params["top_p"] = top_p
+                
         if max_tokens:
             params["max_tokens"] = max_tokens
 

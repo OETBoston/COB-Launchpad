@@ -58,6 +58,8 @@ export class Authentication extends Construct {
         userPassword: true,
         userSrp: true,
       },
+      // OAuth settings (including logout URL) are configured via updateUserPoolClient Lambda
+      // after stack deployment to ensure proper values from config
     });
 
     if (
@@ -140,23 +142,8 @@ export class Authentication extends Construct {
             scopes: ["openid", "email", "profile"],
             attributeRequestMethod: cognito.OidcAttributeRequestMethod.GET,
             attributeMapping: {
-              // Commenting this functionality out until we decide to proceed
-              // with changing the OIDC callback to include the email and 
-              // custom:chatbot_role attributes in the valid format.
-              // This is not production critical. First time users will be
-              // shown the 404 contact administrator page and must reach
-              // out to the admin to get access. Admins can manually add
-              // users to any of the user groups to grant access.
-              //
-              // custom: {
-              //   "custom:chatbot_role": cognito.ProviderAttribute.other(
-              //     "custom:chatbot_role"
-              //   ),
-              //   email_verified:
-              //     cognito.ProviderAttribute.other("email_verified"),
-              //   profile: cognito.ProviderAttribute.other("profile"),
-              // },
-              // email: cognito.ProviderAttribute.other("email"),
+              // isMemberOf will be available in the ID token and Lambda can read it
+              // Cannot map to custom:isMemberOf on existing user pools
             },
             
             ...(config.cognitoFederation?.customOIDC?.OIDCAuthorizationEndpoint &&
@@ -317,7 +304,7 @@ export class Authentication extends Construct {
             "lib/authentication/lambda/addFederatedUserToUserGroup"
           ),
           description:
-            "Add federated user to Cognito user group defined in custom:chatbot_role attribute.",
+            "Add federated user to chatbot_user group if custom:isMemberOf contains SG_AB_LAUNCHPADAI.",
           role: lambdaRoleAddUserToGroup,
           logRetention: config.logRetention ?? logs.RetentionDays.ONE_WEEK,
           loggingFormat: lambda.LoggingFormat.JSON,

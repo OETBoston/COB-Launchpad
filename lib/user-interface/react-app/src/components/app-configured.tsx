@@ -19,6 +19,8 @@ import { Mode } from "@cloudscape-design/global-styles";
 import "@aws-amplify/ui-react/styles.css";
 import { CHATBOT_NAME } from "../common/constants";
 import { UserContext, userContextDefault } from "../common/user-context";
+import { SessionsProvider } from "../common/sessions-context";
+import { ApplicationsProvider } from "../common/applications-context";
 
 export default function AppConfigured() {
   const { tokens } = useTheme();
@@ -243,7 +245,11 @@ export default function AppConfigured() {
               },
             }}
           >
-            <App />
+            <SessionsProvider>
+              <ApplicationsProvider>
+                <App />
+              </ApplicationsProvider>
+            </SessionsProvider>
           </Authenticator>
         </ThemeProvider>
       </UserContext.Provider>

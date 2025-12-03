@@ -170,7 +170,7 @@ def handle_failed_records(records):
         data = detail.get("data", {})
         session_id = data.get("sessionId", "")
 
-        message = "⚠️ *Something went wrong*"
+        message = "⚠️ *This request cannot be completed at this time due to the current model's service capacity constraints. For support, please contact the administrator Michael Huang at [michael.huang@boston.gov](mailto:michael.huang@boston.gov).*"
         if (
             "An error occurred (ValidationException)" in error
             and "The provided image must have dimensions in set [1280x720]" in error

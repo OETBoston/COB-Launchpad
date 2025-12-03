@@ -8,10 +8,9 @@ import {
   Header,
   CollectionPreferences,
   Modal,
-  Alert,
 } from "@cloudscape-design/components";
 import { DateTime } from "luxon";
-import { useState, useEffect, useContext, useCallback } from "react";
+import { useState, useContext } from "react";
 import { Link } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useCollection } from "@cloudscape-design/collection-hooks";
@@ -19,23 +18,17 @@ import { ApiClient } from "../../common/api-client/api-client";
 import { AppContext } from "../../common/app-context";
 import RouterButton from "../wrappers/router-button";
 import { Session } from "../../API";
-import { Utils } from "../../common/utils";
+import { useSessionsContext } from "../../common/sessions-context";
 
-export interface SessionsProps {
-  readonly toolsOpen: boolean;
-}
-
-export default function Sessions(props: SessionsProps) {
+export default function Sessions() {
   const appContext = useContext(AppContext);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { allSessions, loadingSessions, refreshSessions } = useSessionsContext();
   const [selectedItems, setSelectedItems] = useState<Session[]>([]);
   const [preferences, setPreferences] = useState({ pageSize: 20 });
   const [showModalDelete, setShowModalDelete] = useState(false);
   const [deleteAllSessions, setDeleteAllSessions] = useState(false);
-  const [globalError, setGlobalError] = useState<string | undefined>(undefined);
 
-  const { items, collectionProps, paginationProps } = useCollection(sessions, {
+  const { items, collectionProps, paginationProps } = useCollection(allSessions, {
     filtering: {
       empty: (
         <Box margin={{ vertical: "xs" }} textAlign="center" color="inherit">
@@ -57,53 +50,23 @@ export default function Sessions(props: SessionsProps) {
     selection: {},
   });
 
-  const getSessions = useCallback(async () => {
-    if (!appContext) return;
-
-    const apiClient = new ApiClient(appContext);
-    try {
-      setGlobalError(undefined);
-      const result = await apiClient.sessions.getSessions();
-      // Cast to handle type mismatch between Application and RestoredApplicationConfig
-      setSessions(result.data!.listSessions as Session[]);
-    } catch (error) {
-      console.log(Utils.getErrorMessage(error));
-      setGlobalError(Utils.getErrorMessage(error));
-      setSessions([]);
-    }
-  }, [appContext]);
-
-  useEffect(() => {
-    if (!appContext) return;
-
-    (async () => {
-      setIsLoading(true);
-      await getSessions();
-      setIsLoading(false);
-    })();
-  }, [appContext, getSessions, props.toolsOpen]);
-
   const deleteSelectedSessions = async () => {
     if (!appContext) return;
 
-    setIsLoading(true);
     const apiClient = new ApiClient(appContext);
     await Promise.all(
       selectedItems.map((s) => apiClient.sessions.deleteSession(s.id))
     );
-    await getSessions();
-    setIsLoading(false);
+    await refreshSessions();
     setShowModalDelete(false);
   };
 
   const deleteUserSessions = async () => {
     if (!appContext) return;
 
-    setIsLoading(true);
     const apiClient = new ApiClient(appContext);
     await apiClient.sessions.deleteSessions();
-    await getSessions();
-    setIsLoading(false);
+    await refreshSessions();
     setDeleteAllSessions(false);
   };
 
@@ -157,17 +120,8 @@ export default function Sessions(props: SessionsProps) {
         }
         header={"Delete all sessions"}
       >
-        {`Do you want to delete ${sessions.length} sessions?`}
+        {`Do you want to delete ${allSessions.length} sessions?`}
       </Modal>
-      {globalError && (
-        <Alert
-          statusIconAriaLabel="Error"
-          type="error"
-          header="Unable to load the sessions."
-        >
-          {globalError}
-        </Alert>
-      )}
       <Table
         {...collectionProps}
         variant="full-page"
@@ -197,7 +151,7 @@ export default function Sessions(props: SessionsProps) {
         }}
         pagination={<Pagination {...paginationProps} />}
         loadingText="Loading history"
-        loading={isLoading}
+        loading={loadingSessions}
         resizableColumns
         stickyHeader={true}
         preferences={
@@ -236,7 +190,7 @@ export default function Sessions(props: SessionsProps) {
                   iconAlt="Refresh list"
                   iconName="refresh"
                   variant="inline-link"
-                  onClick={() => getSessions()}
+                  onClick={() => refreshSessions()}
                 >
                   Refresh
                 </Button>

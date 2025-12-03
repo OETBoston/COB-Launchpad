@@ -109,73 +109,73 @@ export default function Welcome() {
               items={[
                 {
                   name: "Email Writer",
-                  img: "/images/welcome/featured-apps/email.jpg",
+                  img: "/images/welcome/featured-apps-2/email_writer.png",
                   external: false,
-                  href: "/application/3c5c9f22-73e0-4e1b-9f4b-f7b5e53ea117",
+                  href: "/application/b98e6211-409e-47ed-9bde-50bfa9c2335a",
                   description:
                     "Refine your emails to be clearer and more professional",
                 },
                 {
                   name: "Language Translator",
                   external: false,
-                  img: "/images/welcome/featured-apps/chat.jpg",
-                  href: "/application/31cbaafa-8cbe-439a-8843-65c7933d042c",
+                  img: "/images/welcome/featured-apps-2/language_translator.png",
+                  href: "/application/0489df6f-9756-4a07-9880-50413331592f",
                   description:
                     "Expertly translate and understand other languages",
                 },
                 {
                   name: "Agenda Planner",
                   external: false,
-                  img: "/images/welcome/featured-apps/agenda.jpg",
-                  href: "/application/fb61c2d9-a438-433a-a1a0-bc82e50e299e",
+                  img: "/images/welcome/featured-apps-2/agenda_planner.png",
+                  href: "/application/271a8f9e-b8e0-44f9-a08e-433cd27316c3",
                   description:
                     "Create clear meeting agendas for your team",
                 },
                 {
                   name: "Policy Consultant",
-                  img: "/images/welcome/featured-apps/doc.jpg",
+                  img: "/images/welcome/featured-apps-2/policy_consultant.png",
                   external: false,
-                  href: "/application/f6e36ebb-fe10-4d04-948e-e7df09887405",
+                  href: "/application/8a535c99-8ea5-4c90-adfd-e896a49e7c96",
                   description:
                     "Explore, interpret, and summarize Massachusetts government policies",
                 },
                 {
                   name: "Summary Writer",
                   external: false,
-                  img: "/images/welcome/featured-apps/doc.jpg",
-                  href: "/application/0ee1b0ef-9e09-4415-b8e8-75cff943ff1b",
+                  img: "/images/welcome/featured-apps-2/summary_writer.png",
+                  href: "/application/7b6d9d14-a2d4-4f04-84ec-263a357ae9db",
                   description:
                     "Create concise summaries",
                 },
                 {
                   name: "Document Summarizer",
                   external: false,
-                  img: "/images/welcome/featured-apps/doc.jpg",
-                  href: "/application/4495c0e7-cd1b-491d-8faa-04742f42e1f7",
+                  img: "/images/welcome/featured-apps-2/document_summarizer.png",
+                  href: "/application/d246b11d-1b58-4c2f-8e16-eb8d7c9231a2",
                   description:
                     "Align content to your style brand",
                 },
                 {
                   name: "Daily Planner",
                   external: false,
-                  img: "/images/welcome/featured-apps/agenda.jpg",
-                  href: "/application/6a1f7da3-7801-4171-9687-82b13368d189",
+                  img: "/images/welcome/featured-apps-2/daily_planner.png",
+                  href: "/application/64d17c21-784f-4aa2-a000-40df34d8f768",
                   description:
                     "Organize your day around your goals",
                 },
                 {
                   name: "Memo Writer",
-                  img: "/images/welcome/featured-apps/agenda.jpg",
+                  img: "/images/welcome/featured-apps-2/memo_writer.png",
                   external: false,
-                  href: "/application/896639ea-9968-412f-ab33-d83e20319513",
+                  href: "/application/047d3da0-efcf-421e-bc83-d2ccb2802c82",
                   description:
                     "Write clear, concise, and professional memos",
                 },
                 {
                   name: "Tone Tuner",
                   external: false,
-                  img: "/images/welcome/featured-apps/group.jpg",
-                  href: "/application/b870afe6-d51f-4693-b3ac-2502b21b5dcc",
+                  img: "/images/welcome/featured-apps-2/tone_tuner.png",
+                  href: "/application/acbd4d56-3e85-4150-99cf-4d68f756b65e",
                   description:
                     "Adjust your message to your desired tone",
                 }

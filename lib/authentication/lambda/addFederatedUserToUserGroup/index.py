@@ -1,54 +1,6 @@
 import boto3
+import json
 from botocore.exceptions import ClientError
-
-# def get_user_groups(cognito, username, user_pool_id):
-#     try:
-#         groups = []
-#         pagination_token = None
-#         page_count = 0
-#         max_pages = 100
-
-#         while True:
-#             if page_count >= max_pages:
-#                 print(f"Reached maximum number of pages ({max_pages})")
-#                 break
-
-#             kwargs = {"Username": username, "UserPoolId": user_pool_id}
-#             if pagination_token:
-#                 kwargs["NextToken"] = pagination_token
-
-#             response = cognito.admin_list_groups_for_user(**kwargs)
-#             page_count += 1
-
-#             current_groups = [
-#                 group["GroupName"] for group in response.get("Groups", [])
-#             ]
-#             groups.extend(current_groups)
-
-#             pagination_token = response.get("NextToken")
-#             if not pagination_token:
-#                 break
-
-#         return groups
-
-#     except ClientError as e:
-#         error_code = e.response.get("Error", {}).get("Code", "UnknownError")
-#         print(f"Error getting user {username} groups. Error code: {error_code}")
-#         raise e
-
-
-# def remove_user_from_group(cognito, username, group_name, user_pool_id):
-#     try:
-#         cognito.admin_remove_user_from_group(
-#             UserPoolId=user_pool_id, Username=username, GroupName=group_name
-#         )
-#         print(f"Successfully removed user {username} from group {group_name}")
-#     except ClientError as e:
-#         error_code = e.response.get("Error", {}).get("Code", "UnknownError")
-#         print(
-#             f"Error removing user {username} from group {group_name}. Error code: {error_code}"  # noqa: E501
-#         )
-#         raise e
 
 
 # Function to add a user to a specified Cognito group
@@ -74,54 +26,68 @@ def add_user_to_group(cognito, username, group_name, user_pool_id):
 # Lambda handler function triggered post-confirmation/authentication
 def handler(event, context):
     print("Post Confirmation/Authentication Lambda Triggered")
+    print(f"Full event: {json.dumps(event)}")
+    
     user_attributes = event["request"]["userAttributes"]
-    print(f"User attributes {user_attributes}")
+    print(f"User attributes: {user_attributes}")
 
     # For federated users, the username will be the "sub" from the IdP
     username = event["request"]["userAttributes"]["sub"]
-    # We haven't communicated with IAM's IDP team to enforce this attribute yet, so 
-    # we will use 'Users' as default with manual review for other roles.
-    # Given our department specific settings, future roles should be instead decided by
-    # security group information, and the logic should reside in this lambda function.
-    # new_group = event["request"]["userAttributes"].get("custom:chatbot_role")
-    new_group = "chatbot_user"
     user_pool_id = event["userPoolId"]
 
     try:
         # Check if the user attributes are present, indicating a federated user
         if event["request"]["userAttributes"]:
-            print(f"Federated User Signed In with attributes: {event['request']['userAttributes']}")
+            print(f"Federated User Signed In")
             cognito = boto3.client("cognito-idp")
 
-            # current_groups = get_user_groups(
-            #     cognito=cognito, username=username, user_pool_id=user_pool_id
-            # )
-
-            # print(f"Current groups: {current_groups}")
-
-            # Extract the custom:isMemberOf attribute and parse it as JSON
-            # is_approved_user = "SG_AB_BIDBOT" in json.loads(event['request']['userAttributes']['custom:isMemberOf'])
-            # print("Has Security Group? ", is_approved_user)
-
-            # Groups are not exclusive, so we will not remove the user from other groups.
-            # for group in current_groups:
-            #     if group != new_group:
-            #         remove_user_from_group(cognito, username, group, user_pool_id)
-
-            
-            add_user_to_group(
-                cognito=cognito,
-                username=username,
-                group_name=new_group,
-                user_pool_id=user_pool_id,
+            # Try to extract isMemberOf from different possible locations
+            # 1. Check if it's in custom:isMemberOf (if mapped)
+            # 2. Check if it's in isMemberOf directly
+            # 3. Check in validationData or clientMetadata
+            is_member_of = (
+                user_attributes.get("custom:isMemberOf") or 
+                user_attributes.get("isMemberOf") or
+                event.get("request", {}).get("clientMetadata", {}).get("isMemberOf") or
+                "[]"
             )
+            
+            print(f"isMemberOf value: {is_member_of}")
+            
+            try:
+                # Try to parse as JSON in case it's a JSON array
+                member_groups = json.loads(is_member_of) if is_member_of else []
+                if isinstance(member_groups, str):
+                    # If it's a string after parsing, convert to list
+                    member_groups = [member_groups]
+            except (json.JSONDecodeError, TypeError):
+                # If not valid JSON, treat it as a comma-separated string or single value
+                member_groups = [g.strip() for g in is_member_of.split(",")] if is_member_of else []
+            
+            print(f"Parsed member groups: {member_groups}")
+            
+            # Check if user is a member of SG_AB_LAUNCHPADAI
+            is_approved_user = "SG_AB_LAUNCHPADAI" in member_groups
+            print(f"Has SG_AB_LAUNCHPADAI? {is_approved_user}")
+            
+            if is_approved_user:
+                # Add user to chatbot_user group
+                add_user_to_group(
+                    cognito=cognito,
+                    username=username,
+                    group_name="chatbot_user",
+                    user_pool_id=user_pool_id,
+                )
+            else:
+                print(f"User {username} does not have SG_AB_LAUNCHPADAI security group. Not adding to chatbot_user group.")
+                
     except Exception as error:
-        print("Error: ", error)
+        print(f"Error: {error}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
 
     # Set the final user status to CONFIRMED
     event['response']['finalUserStatus'] = 'CONFIRMED'
-    print("Returning event: ", event)  # Log the event before returning
+    print("Returning event")
     return event
-
-    
     

@@ -29,7 +29,7 @@ export default function SessionPage() {
           ]}
         />
       }
-      content={<Sessions toolsOpen={true} />}
+      content={<Sessions />}
     />
   );
 }

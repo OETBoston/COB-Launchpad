@@ -6,15 +6,14 @@ import {
 import useOnFollow from "../common/hooks/use-on-follow";
 import { useNavigationPanelState } from "../common/hooks/use-navigation-panel-state";
 import { AppContext } from "../common/app-context";
-import { useContext, useState, useEffect, useMemo, useRef } from "react";
+import { useContext, useMemo } from "react";
 import { CHATBOT_NAME } from "../common/constants";
 import { UserContext } from "../common/user-context";
 import { UserRole } from "../common/types";
-import { ApiClient } from "../common/api-client/api-client";
-import { Application, Session } from "../API";
-import { Utils } from "../common/utils";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
+import { useSessionsContext } from "../common/sessions-context";
+import { useApplicationsContext } from "../common/applications-context";
 
 export default function NavigationPanel() {
   const appContext = useContext(AppContext);
@@ -23,11 +22,8 @@ export default function NavigationPanel() {
   const navigate = useNavigate();
   const [navigationPanelState, setNavigationPanelState] =
     useNavigationPanelState();
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [recentSessions, setRecentSessions] = useState<Session[]>([]);
-  const [loadingApps, setLoadingApps] = useState(true);
-  const [loadingSessions, setLoadingSessions] = useState(true);
-  const initialLoadDone = useRef(false);
+  const { applications, loadingApplications: loadingApps } = useApplicationsContext();
+  const { recentSessions, loadingSessions } = useSessionsContext();
 
   const handleNewSession = () => {
     const newSessionId = uuidv4();
@@ -43,69 +39,6 @@ export default function NavigationPanel() {
     const truncated = title.substring(0, maxLength).split(' ').slice(0, -1).join(' ');
     return `${truncated}...`;
   };
-
-  // Fetch applications when component mounts
-  useEffect(() => {
-    const fetchApplications = async () => {
-      if (!appContext) return;
-      
-      try {
-        const apiClient = new ApiClient(appContext);
-        const result = await apiClient.applications.getApplications();
-        if (result.data?.listApplications) {
-          setApplications(result.data.listApplications);
-        }
-      } catch (error) {
-        console.error("Error fetching applications:", Utils.getErrorMessage(error));
-      } finally {
-        setLoadingApps(false);
-      }
-    };
-
-    fetchApplications();
-  }, [appContext]);
-
-  // Fetch recent sessions
-  useEffect(() => {
-    const fetchRecentSessions = async () => {
-      if (!appContext) return;
-      
-      try {
-        const apiClient = new ApiClient(appContext);
-        const result = await apiClient.sessions.getSessions();
-        if (result.data?.listSessions) {
-          // Sort by startTime descending and take the 5 most recent
-          const sortedSessions = [...result.data.listSessions].sort((a, b) => 
-            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-          ).slice(0, 5);
-          
-          setRecentSessions(sortedSessions);
-        }
-      } catch (error) {
-        console.error("Error fetching sessions:", Utils.getErrorMessage(error));
-      } finally {
-        setLoadingSessions(false);
-      }
-    };
-
-    // Add event listener for chat messages
-    const handleChatMessage = () => {
-      fetchRecentSessions();
-    };
-
-    window.addEventListener('chatMessageSent', handleChatMessage);
-
-    // Only fetch on initial mount
-    if (!initialLoadDone.current) {
-      fetchRecentSessions();
-      initialLoadDone.current = true;
-    }
-
-    // Cleanup event listener
-    return () => {
-      window.removeEventListener('chatMessageSent', handleChatMessage);
-    };
-  }, [appContext]);
 
   // Generate navigation items dynamically whenever applications change
   const items = useMemo<SideNavigationProps.Item[]>(() => {

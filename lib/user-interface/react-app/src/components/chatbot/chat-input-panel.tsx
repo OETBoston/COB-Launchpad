@@ -319,7 +319,8 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
 
     let selectedModelOption = getSelectedModelOption(state.models);
     let selectedWorkspace = workspaceDefaultOptions[0];
-    let selectedModelMetadata: Model | null = null;
+    // Get metadata for default model selection
+    let selectedModelMetadata: Model | null = getSelectedModelMetadata(state.models, selectedModelOption);
 
     // If we have session configuration, use those values
     const sessionWorkspaceId = props.sessionConfiguration?.workspaceId;
@@ -824,7 +825,7 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
     [ReadyState.UNINSTANTIATED]: "Uninstantiated",
   }[readyState];
 
-  const modelsOptions = OptionsHelper.getSelectOptionGroups(state.models ?? []);
+  const modelsOptions = OptionsHelper.getSelectOptionGroupsByUseCase(state.models ?? []);
 
   const workspaceOptions = [
     ...(state.workspaces ?? []).map((workspace: any) => ({
@@ -1328,14 +1329,21 @@ function getSelectedModelOption(
 ): SelectProps.Option | null {
   if (models.length === 0) return null;
 
-  // Try to find Claude 3.5 Sonnet as the default model
+  // Try to find Claude Sonnet 4.5 as the default model (latest version)
   const bedrockModels = models.filter((m) => m.provider === "bedrock");
-  const defaultModel = bedrockModels.find((m) => m.name === "anthropic.claude-3-5-sonnet-20240620-v1:0") ||
-                      bedrockModels.find((m) => m.name === "anthropic.claude-3-5-sonnet") ||
-                      bedrockModels.find((m) => m.name === "anthropic.claude-v2") ||
-                      bedrockModels.find((m) => m.name === "anthropic.claude-v1") ||
-                      bedrockModels.find((m) => m.name === "amazon.titan-tg1-large") ||
-                      bedrockModels[0];
+  const defaultModel = 
+    // Try Claude Sonnet 4.5 first (latest)
+    bedrockModels.find((m) => m.name.includes("claude-sonnet-4-5") || m.name.includes("claude-sonnet-4.5")) ||
+    // Fallback to Claude Sonnet 4
+    bedrockModels.find((m) => m.name.includes("claude-sonnet-4") && !m.name.includes("claude-sonnet-4-5")) ||
+    // Fallback to Claude 3.5 Sonnet
+    bedrockModels.find((m) => m.name.includes("anthropic.claude-3-5-sonnet")) ||
+    // Fallback to other Claude versions
+    bedrockModels.find((m) => m.name.includes("anthropic.claude-3-7-sonnet")) ||
+    bedrockModels.find((m) => m.name.includes("anthropic.claude-3-opus")) ||
+    // Last resort fallbacks
+    bedrockModels.find((m) => m.name.includes("anthropic.claude")) ||
+    bedrockModels[0];
 
   if (defaultModel) {
     return {
