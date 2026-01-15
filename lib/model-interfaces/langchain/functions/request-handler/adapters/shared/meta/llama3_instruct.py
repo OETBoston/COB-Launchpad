@@ -1,6 +1,6 @@
-from langchain.schema import AIMessage, HumanMessage
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_classic.memory import ConversationBufferMemory
+from langchain_classic.prompts import PromptTemplate
 
 BEGIN_OF_TEXT = "<|begin_of_text|>"
 SYSTEM_HEADER = "<|start_header_id|>system<|end_header_id|>"

@@ -1,6 +1,6 @@
-from langchain.schema import AIMessage, HumanMessage
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_classic.memory import ConversationBufferMemory
+from langchain_classic.prompts import PromptTemplate
 
 
 Llama2ChatPrompt = """<s>[INST] <<SYS>>

@@ -6,15 +6,19 @@ from decimal import Decimal
 from datetime import datetime
 from botocore.exceptions import ClientError
 
-from langchain.schema import BaseChatMessageHistory
-from langchain.schema.messages import (
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import (
     BaseMessage,
-    _message_to_dict,
     messages_from_dict,
     messages_to_dict,
 )
 from langchain_core.messages.ai import AIMessage, AIMessageChunk
 from langchain_core.messages.human import HumanMessage
+
+# Helper function for message conversion
+def _message_to_dict(message: BaseMessage) -> dict:
+    """Convert a message to a dictionary."""
+    return {"type": message.type, "data": {"content": message.content, "additional_kwargs": message.additional_kwargs}}
 
 client = boto3.resource("dynamodb")
 logger = Logger()

@@ -2,15 +2,15 @@ import os
 import re
 from enum import Enum
 from aws_lambda_powertools import Logger
-from langchain.callbacks.base import BaseCallbackHandler
-from langchain.chains.conversation.base import ConversationChain
-from langchain.chains import ConversationalRetrievalChain
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.history_aware_retriever import create_history_aware_retriever
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts.prompt import PromptTemplate
-from langchain.chains.conversational_retrieval.prompts import (
+from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain_classic.chains.conversation.base import ConversationChain
+from langchain_classic.chains import ConversationalRetrievalChain
+from langchain_classic.chains.retrieval import create_retrieval_chain
+from langchain_classic.chains.history_aware_retriever import create_history_aware_retriever
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.memory import ConversationBufferMemory
+from langchain_classic.prompts.prompt import PromptTemplate
+from langchain_classic.chains.conversational_retrieval.prompts import (
     QA_PROMPT,
     CONDENSE_QUESTION_PROMPT,
 )

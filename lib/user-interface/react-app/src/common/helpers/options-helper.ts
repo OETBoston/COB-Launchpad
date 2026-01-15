@@ -250,6 +250,19 @@ export abstract class OptionsHelper {
       return "Nova";
     }
 
+    // OpenAI variants
+    if (lowerName.includes("gpt-oss-120b")) {
+      return "GPT-OSS 120B";
+    }
+    
+    // Google variants
+    if (lowerName.includes("gemma")) {
+      if (lowerName.includes("3-27b") || lowerName.includes("3.27b")) {
+        return "Gemma 3 27B";
+      }
+      return "Gemma";
+    }
+
     // Other models
     if (lowerName.includes("whisper")) {
       return "Whisper";
@@ -353,6 +366,18 @@ export abstract class OptionsHelper {
       return isNovaPro;
     }
     
+    // OpenAI: Only allow gpt-oss-120b
+    if (lowerName.includes("openai") || lowerName.includes("gpt")) {
+      const isAllowedOpenAI = /gpt-oss-120b/i.test(lowerName);
+      return isAllowedOpenAI;
+    }
+    
+    // Google: Only allow gemma-3-27b-it
+    if (lowerName.includes("google") || lowerName.includes("gemma")) {
+      const isAllowedGoogle = /gemma-3-27b-it/i.test(lowerName);
+      return isAllowedGoogle;
+    }
+    
     // Allow all other models (Titan, etc.)
     return true;
   }
@@ -384,6 +409,8 @@ export abstract class OptionsHelper {
           /nova.*lite/i,
           /nova.*pro/i,
           /nova.*micro/i,
+          /gpt/i,
+          /gemma/i,
         ],
       },
       {

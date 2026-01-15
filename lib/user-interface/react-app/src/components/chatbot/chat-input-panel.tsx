@@ -259,6 +259,16 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
         const modelsResult = await apiClient.models.getModels();
         const models = modelsResult.data ? modelsResult.data.listModels : [];
         
+        // Debug: Log all raw models from backend
+        console.log("[DEBUG] Raw models from backend:", models.length, "total");
+        console.log("[DEBUG] Model names:", models.map((m: any) => m.name));
+        
+        // Debug: Check for our specific models
+        const gptModel = models.find((m: any) => m.name.includes("gpt-oss"));
+        const gemmaModel = models.find((m: any) => m.name.includes("gemma"));
+        console.log("[DEBUG] GPT-OSS model found:", gptModel ? gptModel.name : "NOT FOUND");
+        console.log("[DEBUG] Gemma model found:", gemmaModel ? gemmaModel.name : "NOT FOUND");
+        
         // Load workspaces if RAG is enabled
         let workspaces: Workspace[] = [];
         if (appContext?.config.rag_enabled) {

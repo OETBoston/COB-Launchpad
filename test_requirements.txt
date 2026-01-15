@@ -11,7 +11,7 @@ langchain-aws==1.2.1
 langchain-openai==1.1.7
 langsmith>=0.3.45,<0.4.0
 
-# Updated to 1.x for compatibility
+# Still 0.x by design
 langchain-community==0.4.1
 langchain-text-splitters==1.1.0
 
