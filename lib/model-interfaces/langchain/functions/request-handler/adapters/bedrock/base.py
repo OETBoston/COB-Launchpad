@@ -243,9 +243,28 @@ class BedrockChatAdapter(ModelAdapter):
         top_p = model_kwargs.get("topP")
         max_tokens = model_kwargs.get("maxTokens")
 
+        # Model-specific token limits
+        # Cap max_tokens to model's maximum supported value
+        model_id_lower = self.model_id.lower()
+        
+        # Define model-specific max token limits
+        model_token_limits = {
+            "jamba": 4096,  # AI21 Jamba models (all versions)
+        }
+        
+        # Check if model has a specific limit and cap if necessary
+        for model_keyword, limit in model_token_limits.items():
+            if model_keyword in model_id_lower:
+                if max_tokens and max_tokens > limit:
+                    logger.warning(
+                        f"Model {self.model_id} has max_tokens limit of {limit}. "
+                        f"Requested {max_tokens}, capping to {limit}."
+                    )
+                    max_tokens = limit
+                break
+
         # Claude 4.x models (Sonnet 4, Sonnet 4.5, Opus 4) don't support both temperature and top_p
         # Use only temperature for these models
-        model_id_lower = self.model_id.lower()
         is_claude_4 = (
             "claude-sonnet-4" in model_id_lower or 
             "sonnet-4-5" in model_id_lower or 
