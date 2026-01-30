@@ -203,9 +203,10 @@ def test_create_application_invalid_input(mocker):
     with pytest.raises(ValidationError, match="10 validation error"):
         create_application({})
 
+    # Test that curly braces are rejected (template variable conflict)
     with pytest.raises(ValidationError, match="3 validation error"):
         invalid_input_4 = create_application_input.copy()
-        invalid_input_4["systemPrompt"] = ">"
-        invalid_input_4["systemPromptRag"] = ">"
-        invalid_input_4["condenseSystemPrompt"] = ">"
+        invalid_input_4["systemPrompt"] = "Test {variable}"
+        invalid_input_4["systemPromptRag"] = "Test {variable}"
+        invalid_input_4["condenseSystemPrompt"] = "Test {variable}"
         create_application(invalid_input_4)

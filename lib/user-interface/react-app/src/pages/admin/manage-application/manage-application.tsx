@@ -22,7 +22,8 @@ import { OptionsHelper } from "../../../common/helpers/options-helper";
 import { Application } from "../../../API";
 
 const nameRegex = /^[\w\s+_-]+$/;
-const customPromptRegex = /^[A-Za-z0-9-_., !?]*$/;
+// Relaxed regex for prompts: allows all characters except curly braces (template variables)
+const customPromptRegex = /^[^{}]*$/s;
 
 const defaults: ApplicationManageInput = {
   name: "",
@@ -140,15 +141,15 @@ export default function ManageApplication() {
           "Condense system prompt must be less than 2048 characters";
       }
       if (!customPromptRegex.test(form.systemPrompt)) {
-        errors.systemPrompt = "System prompt cannot have special characters";
+        errors.systemPrompt = "System prompt cannot contain curly braces { }";
       }
       if (!customPromptRegex.test(form.systemPromptRag)) {
         errors.systemPromptRag =
-          "System prompt with workspace cannot have special characters";
+          "System prompt with workspace cannot contain curly braces { }";
       }
       if (!customPromptRegex.test(form.condenseSystemPrompt)) {
         errors.condenseSystemPrompt =
-          "Condense system prompt cannot have special characters";
+          "Condense system prompt cannot contain curly braces { }";
       }
       return errors;
     },
