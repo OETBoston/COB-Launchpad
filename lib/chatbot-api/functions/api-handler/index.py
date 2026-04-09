@@ -21,6 +21,7 @@ from routes.user_feedback import router as user_feedback_router
 from routes.bedrock_kb import router as bedrock_kb_router
 from routes.roles import router as roles_router
 from routes.applications import router as applicatiion_router
+from routes.kpi import router as kpi_router
 
 
 tracer = Tracer()
@@ -42,6 +43,7 @@ app.include_router(user_feedback_router)
 app.include_router(bedrock_kb_router)
 app.include_router(roles_router)
 app.include_router(applicatiion_router)
+app.include_router(kpi_router)
 
 
 @logger.inject_lambda_context(

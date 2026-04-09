@@ -28,7 +28,7 @@ name_regex = r"^[\w\s+_-]+$"
 
 class CreateApplicationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100, pattern=name_regex)
-    description: str = Field(None, max_length=1000, pattern=r"^[A-Za-z0-9-_.:/, !?]*$")
+    description: str = Field(None, max_length=1000)
     model: str = SAFE_SHORT_STR_VALIDATION
     workspace: str = Field(None, max_length=512, pattern=SAFE_STR_REGEX)
     systemPrompt: str = Field(None, max_length=2048, pattern=SAFE_PROMPT_STR_REGEX)
@@ -50,7 +50,7 @@ class CreateApplicationRequest(BaseModel):
 class UpdateApplicationRequest(BaseModel):
     id: str = ID_FIELD_VALIDATION
     name: str = Field(min_length=1, max_length=100, pattern=name_regex)
-    description: str = Field(None, max_length=1000, pattern=r"^[A-Za-z0-9-_.:/, !?]*$")
+    description: str = Field(None, max_length=1000)
     model: str = SAFE_SHORT_STR_VALIDATION
     workspace: str = Field(None, max_length=512, pattern=SAFE_STR_REGEX)
     systemPrompt: str = Field(None, max_length=2048, pattern=SAFE_PROMPT_STR_REGEX)

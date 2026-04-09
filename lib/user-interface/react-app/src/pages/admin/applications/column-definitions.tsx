@@ -1,16 +1,20 @@
-import { Checkbox, TableProps } from "@cloudscape-design/components";
+import { Button, Checkbox, TableProps } from "@cloudscape-design/components";
 import RouterLink from "../../../components/wrappers/router-link";
 import { DateTime } from "luxon";
 import { Application } from "../../../API";
 
-export const ApplicationColumnDefinitions: TableProps.ColumnDefinition<Application>[] =
-  [
+export function getApplicationColumnDefinitions(
+  onDelete: (item: Application) => void
+): TableProps.ColumnDefinition<Application>[] {
+  return [
     {
       id: "name",
       header: "Name",
       sortingField: "name",
       cell: (item: Application) => (
-        <RouterLink href={`/application/${item.id}`}>{item.name}</RouterLink>
+        <RouterLink href={`/admin/applications/manage/${item.id}`}>
+          {item.name}
+        </RouterLink>
       ),
       isRowHeader: true,
     },
@@ -82,4 +86,14 @@ export const ApplicationColumnDefinitions: TableProps.ColumnDefinition<Applicati
         return (a.createTime ?? "").localeCompare(b.createTime ?? "");
       },
     },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: (item: Application) => (
+        <Button variant="inline-link" onClick={() => onDelete(item)}>
+          Delete
+        </Button>
+      ),
+    },
   ];
+}

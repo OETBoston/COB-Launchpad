@@ -389,6 +389,43 @@ type Application @aws_cognito_user_pools {
   updateTime: AWSDateTime
 }
 
+input KpiMetricsInput {
+  startDate: String
+  endDate: String
+}
+
+type KpiMetrics @aws_cognito_user_pools {
+  totalUsers: Int!
+  totalSessions: Int!
+  totalInteractions: Int!
+  avgSessionsPerUser: Float!
+  avgInteractionsPerUser: Float!
+  applicationSessionsPercentage: Float!
+  newUsers: Int!
+  medianSessionsPerUser: Float!
+  medianInteractionsPerUser: Float!
+  heatmapData: [HeatmapDataPoint!]!
+}
+
+type HeatmapDataPoint @aws_cognito_user_pools {
+  date: String!
+  hour: Int!
+  sessions: Int!
+  interactions: Int!
+}
+
+input ExportSessionDataPageInput {
+  limit: Int
+  cursor: String
+  startDate: AWSDateTime
+  endDate: AWSDateTime
+}
+
+type ExportSessionDataPage @aws_cognito_user_pools {
+  rowsJson: String!
+  nextCursor: String
+}
+
 type RestoredApplicationConfig @aws_cognito_user_pools {
   id: String
   name: String
@@ -482,6 +519,10 @@ type Query {
   getApplication(id: String!): Application @aws_cognito_user_pools
   listApplications: [Application!]! 
     @aws_cognito_user_pools(cognito_groups: ["admin", "workspace_manager", "chatbot_user"])
+  getKpiMetrics(input: KpiMetricsInput): KpiMetrics!
+    @aws_cognito_user_pools(cognito_groups: ["admin"])
+  exportSessionDataPage(input: ExportSessionDataPageInput): ExportSessionDataPage!
+    @aws_cognito_user_pools(cognito_groups: ["admin"])
 }
 
 type Subscription {

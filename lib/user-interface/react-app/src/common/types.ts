@@ -67,6 +67,16 @@ export enum UserRole {
   CHATBOT_USER = "chatbot_user",
 }
 
+/** Same role check as main app routes in `app.tsx` — any of these grants access to the chatbot UI. */
+export function userHasChatbotAppAccess(roles: string[] | undefined): boolean {
+  if (!roles?.length) return false;
+  return (
+    roles.includes(UserRole.ADMIN) ||
+    roles.includes(UserRole.WORKSPACE_MANAGER) ||
+    roles.includes(UserRole.CHATBOT_USER)
+  );
+}
+
 export interface AuroraWorkspaceCreateInput {
   name: string;
   embeddingsModel: SelectProps.Option | null;

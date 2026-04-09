@@ -190,6 +190,11 @@ export default function NavigationPanel() {
             text: "Applications",
             href: "/admin/applications",
           },
+          {
+            type: "link",
+            text: "KPI Dashboard",
+            href: "/admin/kpi",
+          },
         ],
       });
     }

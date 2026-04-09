@@ -375,9 +375,9 @@ export default function ChatInputPanel(props: ChatInputPanelProps) {
       if (model) {
         selectedModelOption = {
           label: model.name,
-          value: `${sessionProvider}::${model.name}`
+          value: `${model.provider}::${model.name}`
         };
-        selectedModelMetadata = model;  // Use the found model as metadata
+        selectedModelMetadata = model;
 
         console.log("🔍 Setting model and metadata:", {
           option: selectedModelOption,

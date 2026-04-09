@@ -308,7 +308,7 @@ export class ApiResolvers extends Construct {
 
       apiHandler.addToRolePolicy(
         new iam.PolicyStatement({
-          actions: ["cognito-idp:ListGroups"],
+          actions: ["cognito-idp:ListGroups", "cognito-idp:ListUsers"],
           resources: [props.userPool.userPoolArn],
           effect: iam.Effect.ALLOW,
         })

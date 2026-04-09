@@ -69,6 +69,23 @@ export default function Welcome() {
           }
         >
           <SpaceBetween size="l">
+            <Container>
+              <Header 
+                variant="h1"
+                description="Learn how to responsibly use Generative AI in your work"
+              >
+                Our Current AI Policy
+              </Header>
+              <p>
+                Beacon now offers a knowledge article describing the <Link external href="https://beacon.boston.gov/cob?id=kb_article&sysparm_article=KB0010918">City of Boston's Policy</Link> that applies to all City agencies and departments.
+              </p>
+              <p>
+                The link includes an <Link external href="https://docs.google.com/document/d/1j1YvMuHIFgL_apKu3TYEKeE9Sg7ZtuK82WNJOLebxXM/edit?tab=t.0#heading=h.qng8wn7szh0n">FAQ</Link> along with additional resources available to the City of Boston workforce.
+              </p>
+              <p>
+                Explore the essential dos and don'ts for <strong>drafting documents and letters, writing in plain language or other languages, summarizing text and audio, and even assisting with programming</strong>. Get tips to enhance clarity and effectiveness!
+              </p>
+            </Container>
             <Header
               variant="h2"
             >
@@ -240,39 +257,6 @@ export default function Welcome() {
               </p>
               <p>
                 Whether you're a researcher improving AI reasoning and problem-solving, or a developer crafting precise, reliable interactions with LLMs, mastering prompt engineering is key to unlocking new capabilities.
-              </p>
-            </Container>
-            <Container
-              media={{
-                content: (
-                  <img 
-                    src="/images/welcome/additional-resources/ai-guidelines.jpg" 
-                    alt="Our Current Guidelines"
-                  />
-                ),
-                width: isMobile ? "100%" : "33%",
-                position: isMobile ? "top" : "side"
-              }}
-            >
-              <Header 
-                variant="h1"
-                description="Learn how to responsibly use Generative AI in your work"
-              >
-                Our Current AI Guidelines
-              </Header>
-              <p>
-                On May 18th 2023, our Chief Information Officer, Santi Garces, published an <Link external href="https://www.boston.gov/sites/default/files/file/2023/05/Guidelines-for-Using-Generative-AI-2023.pdf">interim set of guidelines</Link> for using Generative AI that would apply to all City agencies and departments with the exception of Boston Public Schools.
-              </p>
-              <p>
-                He stated, "Generative AI is a tool. We are responsible for the outcomes of our tools. For example, if autocorrect unintentionally changes a word, we are still responsible for the text. Technology enables our work, it does not excuse our judgment nor our accountability."
-              </p>
-              <p>
-                Explore the essential dos and don'ts for {" "}
-                <strong>drafting documents and letters</strong>,{" "}
-                <strong>writing in plain language or other languages</strong>,{" "}
-                <strong>summarizing text and audio</strong>,{" "}
-                <strong>and even assisting with programming</strong>.{" "}
-                Get tips to enhance clarity and effectiveness!
               </p>
             </Container>
           </SpaceBetween>

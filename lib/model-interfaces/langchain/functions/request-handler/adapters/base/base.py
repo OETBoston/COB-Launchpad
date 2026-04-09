@@ -1,5 +1,7 @@
+import json
 import os
 import re
+from decimal import Decimal
 from enum import Enum
 from aws_lambda_powertools import Logger
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -20,6 +22,10 @@ from genai_core.langchain import WorkspaceRetriever, DynamoDBChatMessageHistory
 from genai_core.types import ChatbotMode
 from genai_core.types import CommonError
 from genai_core.clients import get_bedrock_client
+from genai_core.guardrails import (
+    extract_guardrail_payload_from_bedrock,
+    should_persist_guardrail_payload,
+)
 
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.outputs import LLMResult, ChatGeneration
@@ -37,6 +43,7 @@ class Mode(Enum):
 class LLMStartHandler(BaseCallbackHandler):
     prompts = []
     usage = None
+    last_bedrock_response_metadata = None
 
     # Langchain callbacks
     # https://python.langchain.com/v0.2/docs/concepts/#callbacks
@@ -50,26 +57,29 @@ class LLMStartHandler(BaseCallbackHandler):
         self, response: LLMResult, *, run_id, parent_run_id, **kwargs: Any
     ) -> Any:
         generation = response.generations[0][0]  # only one llm request
-        if (
-            generation is not None
-            and isinstance(generation, ChatGeneration)
-            and isinstance(generation.message, AIMessage)
-        ):
-            # In case of rag there could be 2 llm calls.
-            if self.usage is None:
+        if generation is not None and isinstance(generation, ChatGeneration):
+            msg = generation.message
+            if isinstance(msg, AIMessage):
+                self.last_bedrock_response_metadata = getattr(
+                    msg, "response_metadata", None
+                )
+            if isinstance(msg, AIMessage):
+                # In case of rag there could be 2 llm calls.
+                um = getattr(msg, "usage_metadata", None) or {}
+                if self.usage is None:
+                    self.usage = {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": 0,
+                    }
                 self.usage = {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
+                    "input_tokens": self.usage.get("input_tokens", 0)
+                    + um.get("input_tokens", 0),
+                    "output_tokens": self.usage.get("output_tokens", 0)
+                    + um.get("output_tokens", 0),
+                    "total_tokens": self.usage.get("total_tokens", 0)
+                    + um.get("total_tokens", 0),
                 }
-            self.usage = {
-                "input_tokens": self.usage.get("input_tokens", 0)
-                + generation.message.usage_metadata.get("input_tokens", 0),
-                "output_tokens": self.usage.get("output_tokens", 0)
-                + generation.message.usage_metadata.get("output_tokens", 0),
-                "total_tokens": self.usage.get("total_tokens", 0)
-                + generation.message.usage_metadata.get("total_tokens", 0),
-            }
 
 
 class ModelAdapter:
@@ -136,6 +146,7 @@ class ModelAdapter:
                         }
                     },
                 ],
+                outputScope="FULL",
             )
             if response.get("action") == "GUARDRAIL_INTERVENED":
                 outputs = response.get("outputs")
@@ -150,8 +161,60 @@ class ModelAdapter:
                         else "I cannot answer this question."
                     ),
                 }
+            payload = extract_guardrail_payload_from_bedrock(response)
+            if should_persist_guardrail_payload(payload):
+                if source == "INPUT":
+                    self.chat_history.set_pending_guardrail_for_human(payload)
+                else:
+                    self.chat_history.merge_into_last_message_additional_kwargs(
+                        {"guardrail": payload}
+                    )
         else:
             return None
+
+    def record_guardrail_to_session(self, source: str, content: str) -> None:
+        """
+        Call ApplyGuardrail and persist the JSON on the session when guardrails are
+        enforced via Bedrock Converse on the model (so LangChain does not populate
+        response_metadata with trace data, especially under streaming).
+        Skipped when ApplyGuardrail is already used for blocking (Jamba/Cohere path).
+        """
+        if not self.get_bedrock_guardrails():
+            return
+        if self.should_call_apply_bedrock_guardrails():
+            return
+        text = content if content is not None else ""
+        try:
+            bedrock = get_bedrock_client()
+            guardrails = self.get_bedrock_guardrails()
+            response = bedrock.apply_guardrail(
+                guardrailIdentifier=guardrails.get("guardrailIdentifier"),
+                guardrailVersion=guardrails.get("guardrailVersion"),
+                source=source,
+                content=[{"text": {"text": text}}],
+                outputScope="FULL",
+            )
+        except Exception:
+            logger.exception("record_guardrail_to_session failed")
+            return
+
+        payload = extract_guardrail_payload_from_bedrock(response)
+        if not should_persist_guardrail_payload(payload):
+            try:
+                payload = {
+                    "applyGuardrail": json.loads(
+                        json.dumps(response, default=str), parse_float=Decimal
+                    )
+                }
+            except (TypeError, ValueError):
+                payload = {"applyGuardrailRaw": str(response)}
+
+        if source == "INPUT":
+            self.chat_history.set_pending_guardrail_for_human(payload)
+        else:
+            self.chat_history.merge_into_last_message_additional_kwargs(
+                {"guardrail": payload}
+            )
 
     def add_files_to_message_history(self, images=[], documents=[], videos=[]):
         # Needs to be implemented per adapter. (For example Bedrock needs to use base64)
@@ -323,6 +386,11 @@ class ModelAdapter:
             "prompts": clean_prompts,
             "usage": self.callback_handler.usage,
         }
+        gr = extract_guardrail_payload_from_bedrock(
+            getattr(self.callback_handler, "last_bedrock_response_metadata", None)
+        )
+        if should_persist_guardrail_payload(gr):
+            metadata["guardrail"] = gr
 
         # Always store model and workspace configuration for session restoration
         if workspace_id:
@@ -428,7 +496,12 @@ class ModelAdapter:
                 "documents": documents,
                 "prompts": self.callback_handler.prompts,
             }
-            
+            gr = extract_guardrail_payload_from_bedrock(
+                getattr(self.callback_handler, "last_bedrock_response_metadata", None)
+            )
+            if should_persist_guardrail_payload(gr):
+                metadata["guardrail"] = gr
+
             # Store applicationId for application session restoration
             if application_id:
                 metadata["applicationId"] = application_id
@@ -475,6 +548,11 @@ class ModelAdapter:
             "documents": [],
             "prompts": self.callback_handler.prompts,
         }
+        gr = extract_guardrail_payload_from_bedrock(
+            getattr(self.callback_handler, "last_bedrock_response_metadata", None)
+        )
+        if should_persist_guardrail_payload(gr):
+            metadata["guardrail"] = gr
 
         if is_admin_role(user_groups) and metadata is not None:
             self.chat_history.add_metadata(metadata)
@@ -502,6 +580,9 @@ class ModelAdapter:
         input = self.format_prompt(prompt, messages, images + videos)
 
         self.add_files_to_message_history(images, documents, videos)
+
+        if not self.should_call_apply_bedrock_guardrails():
+            self.record_guardrail_to_session("INPUT", prompt)
 
         try:
             if self._mode == ChatbotMode.IMAGE_GENERATION.value:
@@ -569,6 +650,9 @@ class ModelAdapter:
             )
         self.chat_history.add_metadata(ai_response_metadata)
 
+        if not self.should_call_apply_bedrock_guardrails():
+            self.record_guardrail_to_session("OUTPUT", ai_text_response)
+
         response = {
             "sessionId": self.session_id,
             "type": "text",
@@ -600,6 +684,9 @@ class ModelAdapter:
             logger.info("Blocking intput message using Guardrails")
             return guardrail_response
 
+        if not self.should_call_apply_bedrock_guardrails():
+            self.record_guardrail_to_session("INPUT", prompt)
+
         if self._mode == ChatbotMode.CHAIN.value:
             if isinstance(self.llm, ChatBedrockConverse):
                 response = self.run_with_chain_v2(
@@ -626,6 +713,11 @@ class ModelAdapter:
                     guardrail_response.get("content")
                 )
                 return guardrail_response
+
+            if not self.should_call_apply_bedrock_guardrails():
+                self.record_guardrail_to_session(
+                    "OUTPUT", response.get("content")
+                )
 
             return response
 
