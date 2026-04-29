@@ -7,6 +7,7 @@ import {
   Box,
   BreadcrumbGroup,
   Alert,
+  ProgressBar,
   Spinner,
   Select,
   SelectProps,
@@ -24,6 +25,27 @@ import { ApiClient } from "../../../common/api-client/api-client";
 import { HeatmapDataPoint, KpiMetrics } from "../../../API";
 import { Utils } from "../../../common/utils";
 import ActivityHeatmap from "./activity-heatmap";
+import {
+  SESSION_EXPORT_HEADERS,
+  SessionExportRow,
+  buildCommaCsvContent,
+  buildSessionExportXlsxBlob,
+  buildTsvContent,
+  getExportErrorMessage,
+  sessionRowToValues,
+  triggerFileDownload,
+} from "./session-export";
+
+function describeExportError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  const gqlMsg = Utils.getErrorMessage(error);
+  if (gqlMsg !== "Unknown error") {
+    return gqlMsg;
+  }
+  return getExportErrorMessage(error);
+}
 
 type ExportDatePreset =
   | "all"
@@ -148,36 +170,37 @@ export default function KpiDashboard() {
   const [customRange, setCustomRange] =
     useState<DateRangePickerProps.Value | null>(null);
 
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<null | "csv" | "tsv" | "xlsx">(
+    null
+  );
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportPhaseLabel, setExportPhaseLabel] = useState("");
   const [exportDatePreset, setExportDatePreset] = useState<SelectProps.Option>(
     EXPORT_DATE_PRESET_OPTIONS[1]
   );
 
   const isCustom = datePreset.value === "custom";
 
-  const handleExport = useCallback(async () => {
-    if (!appContext) return;
-    setExporting(true);
-    setExportError(undefined);
-    try {
+  const fetchSessionExportRows = useCallback(
+    async (
+      onProgress?: (percent: number, label: string) => void
+    ): Promise<SessionExportRow[]> => {
+      if (!appContext) return [];
+      onProgress?.(5, "Preparing export…");
       const apiClient = new ApiClient(appContext);
       const exportRange = getExportDateRange(
         exportDatePreset.value as ExportDatePreset
       );
       const startDate = exportRange.startDate ?? null;
       const endDate = exportRange.endDate ?? null;
-      type ExportRow = {
-        employeeId: string;
-        userId: string;
-        sessionId: string;
-        startTime: string;
-        interactionCount: number;
-        applicationSession: boolean;
-        history: string;
-      };
-      const rows: ExportRow[] = [];
+      const rows: SessionExportRow[] = [];
       let cursor: string | null | undefined = undefined;
+      let pageIndex = 0;
       for (;;) {
+        onProgress?.(
+          Math.min(68, 10 + pageIndex * 8),
+          `Downloading sessions (page ${pageIndex + 1})…`
+        );
         const result = await apiClient.kpi.exportSessionDataPage(
           cursor,
           undefined,
@@ -186,69 +209,138 @@ export default function KpiDashboard() {
         );
         const page = result.data?.exportSessionDataPage;
         if (!page?.rowsJson) throw new Error("No data returned");
-        const chunk: ExportRow[] = JSON.parse(page.rowsJson);
+        const chunk: SessionExportRow[] = JSON.parse(page.rowsJson);
         rows.push(...chunk);
         if (!page.nextCursor) break;
         cursor = page.nextCursor;
+        pageIndex += 1;
       }
-
-      const csvHeaders = [
-        "Employee ID",
-        "User ID",
-        "Session ID",
-        "Start Time",
-        "Interaction Count",
-        "Application Session",
-        "Session History",
-      ];
+      onProgress?.(72, "Sorting…");
       rows.sort(
         (a, b) =>
           new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
       );
+      onProgress?.(
+        75,
+        rows.length === 0
+          ? "No sessions in range"
+          : `Loaded ${rows.length.toLocaleString()} session(s)`
+      );
+      return rows;
+    },
+    [appContext, exportDatePreset]
+  );
 
-      const csvRows = rows.map((r) => [
-        r.employeeId,
-        r.userId,
-        r.sessionId,
-        r.startTime,
-        String(r.interactionCount),
-        r.applicationSession ? "Yes" : "No",
-        r.history,
-      ]);
-
-      // RFC 4180: always quote fields so Excel keeps each value in one cell (JSON
-      // in Session History can contain \r, \n, Unicode line breaks, commas, etc.).
-      const escapeCsvField = (value: string | number | boolean) => {
-        const s = String(value ?? "");
-        return `"${s.replace(/"/g, '""')}"`;
-      };
-
-      const lineEnding = "\r\n";
-      const csvContent =
-        "\uFEFF" +
-        [
-          csvHeaders.map(escapeCsvField).join(","),
-          ...csvRows.map((row) => row.map(escapeCsvField).join(",")),
-        ].join(lineEnding);
-
-      const blob = new Blob([csvContent], {
-        type: "text/csv;charset=utf-8;",
+  const handleExportCsv = useCallback(async () => {
+    if (!appContext) return;
+    setExporting("csv");
+    setExportError(undefined);
+    setExportProgress(0);
+    setExportPhaseLabel("");
+    try {
+      const rows = await fetchSessionExportRows((pct, label) => {
+        setExportProgress(pct);
+        setExportPhaseLabel(label);
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `session-export-${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      setExportProgress(78);
+      setExportPhaseLabel("Building CSV…");
+      const valueRows = rows.map((r) => sessionRowToValues(r));
+      const text = buildCommaCsvContent(SESSION_EXPORT_HEADERS, valueRows);
+      const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+      setExportProgress(94);
+      setExportPhaseLabel("Starting download…");
+      triggerFileDownload(
+        blob,
+        `session-export-${new Date().toISOString().split("T")[0]}.csv`
+      );
+      setExportProgress(100);
+      setExportPhaseLabel("Done");
     } catch (e) {
-      console.error(Utils.getErrorMessage(e));
-      setExportError(Utils.getErrorMessage(e));
+      console.error(e);
+      setExportError(describeExportError(e));
     } finally {
-      setExporting(false);
+      setExporting(null);
+      setExportProgress(0);
+      setExportPhaseLabel("");
     }
-  }, [appContext, exportDatePreset]);
+  }, [appContext, fetchSessionExportRows]);
+
+  const handleExportTsv = useCallback(async () => {
+    if (!appContext) return;
+    setExporting("tsv");
+    setExportError(undefined);
+    setExportProgress(0);
+    setExportPhaseLabel("");
+    try {
+      const rows = await fetchSessionExportRows((pct, label) => {
+        setExportProgress(pct);
+        setExportPhaseLabel(label);
+      });
+      setExportProgress(78);
+      setExportPhaseLabel("Building TSV…");
+      const valueRows = rows.map((r) => sessionRowToValues(r));
+      const text = buildTsvContent(SESSION_EXPORT_HEADERS, valueRows);
+      const blob = new Blob([text], {
+        type: "text/tab-separated-values;charset=utf-8;",
+      });
+      setExportProgress(94);
+      setExportPhaseLabel("Starting download…");
+      triggerFileDownload(
+        blob,
+        `session-export-${new Date().toISOString().split("T")[0]}.tsv`
+      );
+      setExportProgress(100);
+      setExportPhaseLabel("Done");
+    } catch (e) {
+      console.error(e);
+      setExportError(describeExportError(e));
+    } finally {
+      setExporting(null);
+      setExportProgress(0);
+      setExportPhaseLabel("");
+    }
+  }, [appContext, fetchSessionExportRows]);
+
+  const handleExportXlsx = useCallback(async () => {
+    if (!appContext) return;
+    setExporting("xlsx");
+    setExportError(undefined);
+    setExportProgress(0);
+    setExportPhaseLabel("");
+    try {
+      const rows = await fetchSessionExportRows((pct, label) => {
+        setExportProgress(pct);
+        setExportPhaseLabel(label);
+      });
+      const valueRows = rows.map((r) => sessionRowToValues(r));
+      setExportPhaseLabel("Building Excel file (large exports can take a minute)…");
+      const blob = await buildSessionExportXlsxBlob(
+        SESSION_EXPORT_HEADERS,
+        valueRows,
+        {
+          onProgress: (pct) => {
+            setExportProgress(pct);
+            setExportPhaseLabel("Writing spreadsheet…");
+          },
+        }
+      );
+      setExportProgress(99);
+      setExportPhaseLabel("Starting download…");
+      triggerFileDownload(
+        blob,
+        `session-export-${new Date().toISOString().split("T")[0]}.xlsx`
+      );
+      setExportProgress(100);
+      setExportPhaseLabel("Done");
+    } catch (e) {
+      console.error(e);
+      setExportError(describeExportError(e));
+    } finally {
+      setExporting(null);
+      setExportProgress(0);
+      setExportPhaseLabel("");
+    }
+  }, [appContext, fetchSessionExportRows]);
 
   const fetchMetrics = useCallback(async () => {
     if (!appContext) return;
@@ -592,7 +684,7 @@ export default function KpiDashboard() {
                   header={
                     <Header
                       variant="h2"
-                      description="Download session data as a CSV file. Includes Employee ID, session details, and interaction counts."
+                      description="Download session data as CSV, TSV, or Excel. Includes Employee ID, session details, and interaction counts."
                     >
                       Data Export
                     </Header>
@@ -601,15 +693,39 @@ export default function KpiDashboard() {
                   <SpaceBetween size="m">
                     <Box variant="p">
                       Export session records for the selected time range (by
-                      session start time). The export maps each user to their
-                      Employee ID and includes session metadata such as start
-                      time, interaction count, and whether the session used an
-                      application preset.
+                      session start time). Comma-separated CSV follows RFC 4180
+                      quoting; tab-separated TSV avoids commas inside JSON
+                      session text. For Microsoft Excel, prefer{" "}
+                      <strong>Excel (.xlsx)</strong> or <strong>TSV</strong> so
+                      long Session History stays in one cell. Very long Session
+                      History text may be truncated for Excel (.xlsx) to stay
+                      under Excel’s per-cell limit.
                     </Box>
+                    {exporting !== null && (
+                      <SpaceBetween size="xs">
+                        <Alert type="info" header="Export in progress">
+                          Keep this tab open and do not navigate away until the
+                          download starts. Large exports can take several
+                          minutes.
+                        </Alert>
+                        <ProgressBar
+                          value={exportProgress}
+                          label={exportPhaseLabel || "Working…"}
+                          description={
+                            exporting === "xlsx"
+                              ? "Fetching data, then building the workbook in your browser."
+                              : "Fetching data and building the file."
+                          }
+                          status={
+                            exportProgress >= 100 ? "success" : "in-progress"
+                          }
+                        />
+                      </SpaceBetween>
+                    )}
                     <SpaceBetween size="m">
                       <FormField label="Time range">
                         <Select
-                          disabled={exporting}
+                          disabled={exporting !== null}
                           selectedOption={exportDatePreset}
                           onChange={({ detail }) =>
                             setExportDatePreset(detail.selectedOption)
@@ -617,14 +733,33 @@ export default function KpiDashboard() {
                           options={EXPORT_DATE_PRESET_OPTIONS}
                         />
                       </FormField>
-                      <Button
-                        variant="primary"
-                        loading={exporting}
-                        onClick={handleExport}
-                        iconName="download"
-                      >
-                        {exporting ? "Exporting..." : "Export to CSV"}
-                      </Button>
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button
+                          disabled={exporting !== null}
+                          loading={exporting === "csv"}
+                          onClick={handleExportCsv}
+                          iconName="download"
+                        >
+                          {exporting === "csv" ? "Exporting…" : "CSV"}
+                        </Button>
+                        <Button
+                          disabled={exporting !== null}
+                          loading={exporting === "tsv"}
+                          onClick={handleExportTsv}
+                          iconName="download"
+                        >
+                          {exporting === "tsv" ? "Exporting…" : "TSV"}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          disabled={exporting !== null}
+                          loading={exporting === "xlsx"}
+                          onClick={handleExportXlsx}
+                          iconName="download"
+                        >
+                          {exporting === "xlsx" ? "Exporting…" : "Excel (.xlsx)"}
+                        </Button>
+                      </SpaceBetween>
                     </SpaceBetween>
                   </SpaceBetween>
                 </Container>
